@@ -51,7 +51,7 @@ function waitForBoard(timeout = 5000) {
 function isBoardReady() {
 	const game = detectGame();
 	if (game === 'tango') return !!document.querySelector('[data-testid="interactive-grid"]');
-	if (game === 'queens') return !!document.querySelector('[data-testid="queens-cell"]'); // TODO: verify
+	if (game === 'queens') return !!document.querySelector('[data-testid="interactive-grid"]');
 	if (game === 'zip') return !!document.querySelector('[data-testid="zip-game-container"]');
 	if (game === 'sudoku') return !!document.querySelector('[data-sudoku-grid="true"]');
 
@@ -212,17 +212,60 @@ function scrapeTango() {
 }
 
 function scrapeQueens() {
-	// TODO: inspect LinkedIn's queens DOM and fill real selectors
-	const cells = document.querySelectorAll('[data-testid="queens-cell"]');
-	const size = Math.round(Math.sqrt(cells.length));
+	const grid = document.querySelector('[data-testid="interactive-grid"]');
+
+	if (!grid) {
+		throw new Error('Queens grid not found');
+	}
+
+	const cellEls = [...grid.querySelectorAll('[data-cell-idx]')];
+
+	const size = Math.round(Math.sqrt(cellEls.length));
+
+	// region matrix
 	const regions = Array.from({ length: size }, () => Array(size).fill(0));
-	cells.forEach((cell) => {
-		const row = parseInt(cell.dataset.row);
-		const col = parseInt(cell.dataset.col);
-		const region = parseInt(cell.dataset.region);
-		regions[row][col] = region;
-	});
-	return { size, regions, queens: Array(size).fill(-1) };
+
+	// queens[row] = col
+	const queens = Array(size).fill(-1);
+
+	// map region names/colors -> numeric ids
+	const regionMap = new Map();
+
+	let nextRegionId = 1;
+
+	for (const cell of cellEls) {
+		const idx = Number(cell.dataset.cellIdx);
+
+		const row = Math.floor(idx / size);
+		const col = idx % size;
+
+		const label = cell.getAttribute('aria-label') || '';
+
+		// extract region/color name
+		// example aria-label usually contains:
+		// "Row 1 Column 2 color blue"
+		const regionMatch = label.match(/color ([^,]+)/i);
+
+		const regionName = regionMatch ? regionMatch[1].trim().toLowerCase() : 'unknown';
+
+		// assign stable numeric region ids
+		if (!regionMap.has(regionName)) {
+			regionMap.set(regionName, nextRegionId++);
+		}
+
+		regions[row][col] = regionMap.get(regionName);
+
+		// existing queen
+		if (/queen/i.test(label)) {
+			queens[row] = col;
+		}
+	}
+
+	return {
+		size,
+		regions,
+		queens,
+	};
 }
 
 function scrapeZip() {
@@ -284,7 +327,17 @@ function scrapeSudoku() {
 }
 
 function solveGame(game, board) {
-	if (game === 'queens') return queensSolver.solve(board);
+	if (game === 'queens') {
+		const solved = queensSolver.solve(board);
+
+		if (!solved) return null;
+
+		// solver mutates board.queens
+		return {
+			size: board.size,
+			queens: [...board.queens],
+		};
+	}
 	if (game === 'tango') return tangoSolver.solve(board);
 	if (game === 'zip') return zipSolver.solve(board);
 	if (game === 'sudoku') {
@@ -296,9 +349,57 @@ function solveGame(game, board) {
 
 function highlightSolution(game, result) {
 	if (game === 'queens') {
-		result.queens.forEach((col, row) => {
+		// clear old highlights
+		document.querySelectorAll('.solver-queen-overlay').forEach((el) => el.remove());
+
+		// solver may return raw array OR object
+		const queens = Array.isArray(result) ? result : result.queens;
+
+		if (!queens) {
+			console.error('[Queens] Invalid result:', result);
+			return;
+		}
+
+		queens.forEach((col, row) => {
+			if (col < 0) return;
+
 			const cell = getCellElement(row, col);
-			if (cell) cell.style.outline = '2px solid #22c55e';
+
+			if (!cell) {
+				console.warn('[Queens] Missing cell:', row, col);
+				return;
+			}
+
+			cell.style.position = 'relative';
+
+			const overlay = document.createElement('div');
+
+			overlay.className = 'solver-queen-overlay';
+
+			Object.assign(overlay.style, {
+				position: 'absolute',
+				inset: '3px',
+				borderRadius: '10px',
+				background: 'rgba(34,197,94,0.12)',
+				boxShadow: 'inset 0 0 0 3px rgba(34,197,94,0.95)',
+				display: 'flex',
+				alignItems: 'center',
+				justifyContent: 'center',
+				pointerEvents: 'none',
+				zIndex: '9999',
+			});
+
+			overlay.innerHTML = `
+			<div style="
+				font-size:20px;
+				font-weight:700;
+				color:#22c55e;
+			">
+				♛
+			</div>
+		`;
+
+			cell.appendChild(overlay);
 		});
 	}
 	if (game === 'tango') {
@@ -662,19 +763,26 @@ function getCellElement(row, col) {
 		return document.querySelector(`.sudoku-cell[data-cell-idx="${idx}"]`);
 	}
 
-	// Zip
-	if (game === 'zip') {
+	// Zip + Queens
+	if (game === 'zip' || game === 'queens') {
 		const grid = document.querySelector('[data-testid="interactive-grid"]');
 
-		if (!grid) return null;
+		if (!grid) {
+			console.error('[Solver] Board not found');
+			return null;
+		}
 
-		const size = Math.sqrt(grid.querySelectorAll('[data-cell-idx]').length);
+		const cells = grid.querySelectorAll('[data-cell-idx]');
+
+		const size = Math.sqrt(cells.length);
 
 		const idx = row * size + col;
 
 		const cell = grid.querySelector(`[data-cell-idx="${idx}"]`);
 
-		if (cell) cell.tabIndex = 0;
+		if (cell) {
+			cell.tabIndex = 0;
+		}
 
 		return cell;
 	}
