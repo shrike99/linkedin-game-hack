@@ -1,3 +1,11 @@
+let cachedSolution = null;
+let cachedGame = null;
+let cachedBoardHash = null;
+
+function getBoardHash(board) {
+	return JSON.stringify(board);
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 	if (message.type === 'SOLVE') handleSolve(true).then(sendResponse);
 	if (message.type === 'GET_GAME') sendResponse({ game: detectGame() });
@@ -45,13 +53,19 @@ function isBoardReady() {
 	if (game === 'tango') return !!document.querySelector('[data-testid="interactive-grid"]');
 	if (game === 'queens') return !!document.querySelector('[data-testid="queens-cell"]'); // TODO: verify
 	if (game === 'zip') return !!document.querySelector('[data-testid="zip-cell"]'); // TODO: verify
-	if (game === 'sudoku') return !!document.querySelector('[data-testid="sudoku-cell"]'); // TODO: verify
+	if (game === 'sudoku') return !!document.querySelector('[data-sudoku-grid="true"]');
+
 	return false;
 }
 
 async function handleSolve(forceSolve = false) {
 	const game = detectGame();
-	if (!game) return { success: false, error: 'No game detected' };
+	if (!game) {
+		return {
+			success: false,
+			error: 'No game detected',
+		};
+	}
 
 	try {
 		await waitForBoard();
@@ -59,39 +73,62 @@ async function handleSolve(forceSolve = false) {
 		const settings = await getSettings();
 
 		if (!settings.enabled) {
-			return { success: false, error: 'Solver disabled' };
+			return {
+				success: false,
+				error: 'Solver disabled',
+			};
 		}
 
 		if (!settings.games[game]) {
-			return { success: false, error: `${game} solver disabled` };
+			return {
+				success: false,
+				error: `${game} solver disabled`,
+			};
 		}
 
 		const board = scrapeBoard(game);
+		const boardHash = getBoardHash(board);
 
-		const solveStart = performance.now();
-		const result = solveGame(game, board);
-		const solveTime = performance.now() - solveStart;
+		let result = null;
 
-		if (!result) {
-			return { success: false, error: 'No solution found' };
+		// reuse cached solution if same board
+		const canReuse = cachedSolution && cachedGame === game && cachedBoardHash === boardHash;
+
+		if (canReuse) {
+			result = cachedSolution;
+		} else {
+			const solveStart = performance.now();
+
+			result = solveGame(game, board);
+
+			const solveTime = performance.now() - solveStart;
+
+			console.log(`[Solver] solved in ${solveTime.toFixed(1)}ms`);
+
+			if (!result) {
+				return {
+					success: false,
+					error: 'No solution found',
+				};
+			}
+
+			// save cache
+			cachedSolution = result;
+			cachedGame = game;
+			cachedBoardHash = boardHash;
 		}
 
-		// ALWAYS highlight if enabled
+		// highlight immediately
 		if (settings.highlight) {
 			highlightSolution(game, result);
 		}
 
-		// Only actually solve if:
-		// - autosolve is enabled
-		// - OR user explicitly clicked solve
+		// don't click unless autosolve or button press
 		if (!settings.autoSolve && !forceSolve) {
-			return { success: true, highlighted: true };
-		}
-
-		// wait at least one speed tick before starting clicks
-		const minDelay = settings.speed;
-		if (solveTime < minDelay) {
-			await sleep(minDelay - solveTime);
+			return {
+				success: true,
+				highlighted: true,
+			};
 		}
 
 		await applySolution(game, result, settings);
@@ -99,7 +136,11 @@ async function handleSolve(forceSolve = false) {
 		return { success: true };
 	} catch (e) {
 		console.error('[Solver] Error:', e);
-		return { success: false, error: e.toString() };
+
+		return {
+			success: false,
+			error: e.toString(),
+		};
 	}
 }
 
@@ -199,15 +240,27 @@ function scrapeZip() {
 }
 
 function scrapeSudoku() {
-	// TODO: inspect LinkedIn's sudoku DOM and fill real selectors
-	const cells = document.querySelectorAll('[data-testid="sudoku-cell"]');
-	const board = Array.from({ length: 6 }, () => Array(6).fill(0));
-	cells.forEach((cell) => {
-		const row = parseInt(cell.dataset.row);
-		const col = parseInt(cell.dataset.col);
-		const val = cell.dataset.value ? parseInt(cell.dataset.value) : 0;
-		board[row][col] = val;
+	const grid = document.querySelector('[data-sudoku-grid="true"]');
+	if (!grid) return null;
+
+	const cellEls = grid.querySelectorAll('.sudoku-cell');
+
+	const size = 6;
+	const board = Array.from({ length: size }, () => Array(size).fill(0));
+
+	cellEls.forEach((cell) => {
+		const idx = parseInt(cell.dataset.cellIdx);
+
+		const row = Math.floor(idx / size);
+		const col = idx % size;
+
+		const content = cell.querySelector('.sudoku-cell-content');
+
+		const value = parseInt(content?.textContent?.trim());
+
+		board[row][col] = Number.isNaN(value) ? 0 : value;
 	});
+
 	return board;
 }
 
@@ -360,17 +413,31 @@ async function applyZip(path, settings) {
 }
 
 async function applySudoku(board, settings) {
+	console.log(board);
 	for (let r = 0; r < 6; r++) {
 		for (let c = 0; c < 6; c++) {
-			const val = board[r][c];
-			if (val === 0) continue;
 			const cell = getCellElement(r, c);
 			if (!cell) continue;
 
-			await clickCell(r, c, settings);
+			// skip prefilled cells
+			if (cell.classList.contains('sudoku-cell-prefilled')) {
+				continue;
+			}
 
-			cell.dispatchEvent(new KeyboardEvent('keydown', { key: String(val), bubbles: true }));
-			cell.dispatchEvent(new KeyboardEvent('keyup', { key: String(val), bubbles: true }));
+			const value = board[r][c];
+			if (!value) continue;
+
+			// click cell
+			cell.click();
+
+			await sleep(30);
+
+			// click number button
+			const numBtn = document.querySelector(`.sudoku-input-button[data-number="${value}"]`);
+
+			if (numBtn) {
+				numBtn.click();
+			}
 
 			await sleep(settings.speed);
 		}
@@ -378,11 +445,25 @@ async function applySudoku(board, settings) {
 }
 
 function getCellElement(row, col) {
-	// for tango, look up by a11y text id
-	const a11y = document.querySelector(`[id$="a11y-text-${row}-${col}"]`);
-	if (a11y) return a11y.closest('[role="button"]');
+	const game = detectGame();
 
-	// fallback for other games: data attributes
+	// Tango
+	if (game === 'tango') {
+		const a11y = document.querySelector(`[id$="a11y-text-${row}-${col}"]`);
+
+		if (a11y) {
+			return a11y.closest('[role="button"]');
+		}
+	}
+
+	// Sudoku
+	if (game === 'sudoku') {
+		const idx = row * 6 + col;
+
+		return document.querySelector(`.sudoku-cell[data-cell-idx="${idx}"]`);
+	}
+
+	// generic fallback
 	return document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
 }
 
