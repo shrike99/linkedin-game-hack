@@ -22,6 +22,23 @@ function solve(board) {
 	return true; //PUZZLE SOLVED
 }
 
+function printBoard(board) {
+	const rows = board.length;
+
+	const top = '╔═══╤═══╤═══╦═══╤═══╤═══╗';
+	const midThin = '╟───┼───┼───╫───┼───┼───╢';
+	const midBold = '╠═══╪═══╪═══╬═══╪═══╪═══╣';
+	const bottom = '╚═══╧═══╧═══╩═══╧═══╧═══╝';
+
+	console.log(top);
+	board.forEach((row, i) => {
+		const line = '║ ' + row[0] + ' │ ' + row[1] + ' │ ' + row[2] + ' ║ ' + row[3] + ' │ ' + row[4] + ' │ ' + row[5] + ' ║';
+		console.log(line);
+		if (i < rows - 1) console.log(i === 1 || i === 3 ? midBold : midThin);
+	});
+	console.log(bottom);
+}
+
 function isValid(board, row, column, number) {
 	// CHECK ROW AND COLUMN
 	for (let i = 0; i < 6; i++) {
@@ -50,6 +67,9 @@ board = [
 	[0, 3, 5, 6, 1, 0],
 ];
 
+start = performance.now();
 solve(board);
+end = performance.now();
 
-console.log(board);
+printBoard(board);
+console.log('TIME TAKEN: ' + (end - start) + 'ms');
