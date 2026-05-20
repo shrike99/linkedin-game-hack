@@ -1,15 +1,19 @@
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-	if (message.type === 'SOLVE') handleSolve().then(sendResponse);
+	if (message.type === 'SOLVE') handleSolve(true).then(sendResponse);
 	if (message.type === 'GET_GAME') sendResponse({ game: detectGame() });
 	return true;
 });
-
 chrome.storage.sync.get(['enabled', 'autoSolve'], ({ enabled, autoSolve }) => {
 	if (!enabled || !autoSolve) return;
 	waitForBoard()
 		.then(() => handleSolve())
 		.catch((err) => console.warn('[Solver] Auto-solve failed:', err));
 });
+
+// Auto-highlight on page load (without solving)
+waitForBoard()
+	.then(() => handleSolve(false))
+	.catch((err) => console.warn('[Solver] Highlight failed:', err));
 
 function detectGame() {
 	const url = window.location.href;
@@ -45,42 +49,50 @@ function isBoardReady() {
 	return false;
 }
 
-async function handleSolve() {
+async function handleSolve(forceSolve = false) {
 	const game = detectGame();
-	console.log(game);
 	if (!game) return { success: false, error: 'No game detected' };
 
 	try {
 		await waitForBoard();
 
 		const settings = await getSettings();
-		console.log(settings);
-		if (!settings.enabled) return { success: false, error: 'Solver disabled' };
-		if (!settings.games[game]) return { success: false, error: `${game} solver disabled` };
+
+		if (!settings.enabled) {
+			return { success: false, error: 'Solver disabled' };
+		}
+
+		if (!settings.games[game]) {
+			return { success: false, error: `${game} solver disabled` };
+		}
 
 		const board = scrapeBoard(game);
-
-		console.log(board);
 
 		const solveStart = performance.now();
 		const result = solveGame(game, board);
 		const solveTime = performance.now() - solveStart;
 
-		if (!result) return { success: false, error: 'No solution found' };
+		if (!result) {
+			return { success: false, error: 'No solution found' };
+		}
 
-		// Always highlight when enabled
+		// ALWAYS highlight if enabled
 		if (settings.highlight) {
 			highlightSolution(game, result);
 		}
 
-		// If we're only highlighting, stop here for Tango
-		if (game === 'tango' && settings.highlight && !settings.autoSolve) {
+		// Only actually solve if:
+		// - autosolve is enabled
+		// - OR user explicitly clicked solve
+		if (!settings.autoSolve && !forceSolve) {
 			return { success: true, highlighted: true };
 		}
 
 		// wait at least one speed tick before starting clicks
 		const minDelay = settings.speed;
-		if (solveTime < minDelay) await sleep(minDelay - solveTime);
+		if (solveTime < minDelay) {
+			await sleep(minDelay - solveTime);
+		}
 
 		await applySolution(game, result, settings);
 
@@ -218,22 +230,45 @@ function highlightSolution(game, result) {
 		});
 	}
 	if (game === 'tango') {
-		const SUN = 1,
-			MOON = 2;
+		const SUN = 1;
+		const MOON = 2;
+
+		// remove old highlights first
+		document.querySelectorAll('.solver-highlight').forEach((el) => el.remove());
+
 		for (let r = 0; r < result.size; r++) {
 			for (let c = 0; c < result.size; c++) {
 				const cell = getCellElement(r, c);
 				if (!cell) continue;
-				// Skip prefilled cells (aria-disabled="true")
+
+				// skip prefilled cells
 				if (cell.getAttribute('aria-disabled') === 'true') continue;
+
 				const val = result.cells[r][c];
+				if (!val) continue;
+
+				// make sure cell can contain absolute child
+				cell.style.position = 'relative';
+
+				// create overlay
+				const overlay = document.createElement('div');
+				overlay.className = 'solver-highlight';
+
+				overlay.style.position = 'absolute';
+				overlay.style.inset = '4px';
+				overlay.style.borderRadius = '8px';
+				overlay.style.pointerEvents = 'none';
+				overlay.style.zIndex = '999';
+
 				if (val === SUN) {
-					cell.style.outline = '2px solid #f59e0b';
-					cell.style.backgroundColor = 'rgba(245, 158, 11, 0.18)';
+					overlay.style.boxShadow = 'inset 0 0 0 3px rgba(245,158,11,0.9)';
+					overlay.style.background = 'rgba(245,158,11,0.10)';
 				} else if (val === MOON) {
-					cell.style.outline = '2px solid #818cf8';
-					cell.style.backgroundColor = 'rgba(129, 140, 248, 0.18)';
+					overlay.style.boxShadow = 'inset 0 0 0 3px rgba(99,102,241,0.9)';
+					overlay.style.background = 'rgba(99,102,241,0.10)';
 				}
+
+				cell.appendChild(overlay);
 			}
 		}
 	}
