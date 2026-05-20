@@ -47,16 +47,20 @@ function isBoardReady() {
 
 async function handleSolve() {
 	const game = detectGame();
+	console.log(game);
 	if (!game) return { success: false, error: 'No game detected' };
 
 	try {
 		await waitForBoard();
 
 		const settings = await getSettings();
+		console.log(settings);
 		if (!settings.enabled) return { success: false, error: 'Solver disabled' };
 		if (!settings.games[game]) return { success: false, error: `${game} solver disabled` };
 
 		const board = scrapeBoard(game);
+
+		console.log(board);
 
 		const solveStart = performance.now();
 		const result = solveGame(game, board);
@@ -105,7 +109,10 @@ function scrapeBoard(game) {
 function scrapeTango() {
 	const grid = document.querySelector('[data-testid="interactive-grid"]');
 	const cellEls = grid.querySelectorAll('[data-testid^="cell-"]');
-	const size = Math.sqrt(cellEls.length);
+	const size = Math.round(Math.sqrt(cellEls.length));
+	if (size * size !== cellEls.length) {
+		console.warn(`[Tango] Expected square grid but got ${cellEls.length} cells (√ ≈ ${Math.sqrt(cellEls.length)}). Proceeding with size=${size}.`);
+	}
 	const cells = Array.from({ length: size }, () => Array(size).fill(0));
 	const constraints = [];
 
@@ -149,7 +156,7 @@ function scrapeTango() {
 function scrapeQueens() {
 	// TODO: inspect LinkedIn's queens DOM and fill real selectors
 	const cells = document.querySelectorAll('[data-testid="queens-cell"]');
-	const size = Math.sqrt(cells.length);
+	const size = Math.round(Math.sqrt(cells.length));
 	const regions = Array.from({ length: size }, () => Array(size).fill(0));
 	cells.forEach((cell) => {
 		const row = parseInt(cell.dataset.row);
@@ -163,7 +170,7 @@ function scrapeQueens() {
 function scrapeZip() {
 	// TODO: inspect LinkedIn's zip DOM and fill real selectors
 	const cells = document.querySelectorAll('[data-testid="zip-cell"]');
-	const size = Math.sqrt(cells.length);
+	const size = Math.round(Math.sqrt(cells.length));
 	const grid = Array.from({ length: size }, () => Array(size).fill(0));
 	cells.forEach((cell) => {
 		const row = parseInt(cell.dataset.row);
@@ -188,12 +195,12 @@ function scrapeSudoku() {
 }
 
 function solveGame(game, board) {
-	if (game === 'queens') return solve(board); // solver-queens.js
-	if (game === 'tango') return solve(board); // solver-tango.js
-	if (game === 'zip') return solve(board); // solver-zip.js
+	if (game === 'queens') return queensSolver.solve(board);
+	if (game === 'tango') return tangoSolver.solve(board);
+	if (game === 'zip') return zipSolver.solve(board);
 	if (game === 'sudoku') {
 		const copy = board.map((r) => [...r]);
-		const solved = solveSudoku(copy); // solver-sudoku.js
+		const solved = sudokuSolver.solve(copy);
 		return solved ? copy : null;
 	}
 }
