@@ -1,6 +1,17 @@
 {
 	"manifest_version": 3,
-	"name": "LinkedIn Games Solver",
+	"name": "LinkedIn Game Solver",
+	"version": "1.0.0",
+	"description": "Automatically solves some LinkedIn Games",
+
+	"action": {
+		"default_popup": "index.html"
+	},
+
+	"permissions": ["activeTab", "scripting", "storage"],
+
+	"host_permissions": ["https://www.linkedin.com/*"],
+
 	"content_scripts": [
 		{
 			"matches": ["https://www.linkedin.com/games/*"],

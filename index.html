@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>LinkedIn Game Solver</title>
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500;600&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet" />
+		<style>
+			*,
+			*::before,
+			*::after {
+				box-sizing: border-box;
+				margin: 0;
+				padding: 0;
+			}
+
+			:root {
+				--bg: #09090b;
+				--surface: #111113;
+				--border: #27272a;
+				--border-2: #3f3f46;
+				--muted: #71717a;
+				--text: #fafafa;
+				--text-2: #a1a1aa;
+				--accent: #e4e4e7;
+				--green: #22c55e;
+				--green-dim: #16a34a22;
+				--amber: #f59e0b;
+				--blue: #3b82f6;
+				--red: #ef4444;
+				--radius: 8px;
+				--radius-sm: 5px;
+			}
+
+			body {
+				width: 320px;
+				background: var(--bg);
+				color: var(--text);
+				font-family: 'Geist', sans-serif;
+				font-size: 13px;
+				line-height: 1.5;
+				padding: 0;
+				overflow: hidden;
+			}
+
+			/* ── HEADER ── */
+			.header {
+				padding: 16px 16px 12px;
+				border-bottom: 1px solid var(--border);
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+			}
+			.header-left {
+				display: flex;
+				align-items: center;
+				gap: 10px;
+			}
+			.logo {
+				width: 28px;
+				height: 28px;
+				background: var(--text);
+				border-radius: 6px;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+			}
+			.logo svg {
+				width: 16px;
+				height: 16px;
+			}
+			.header-title {
+				font-size: 13px;
+				font-weight: 600;
+				letter-spacing: -0.01em;
+				color: var(--text);
+			}
+			.header-sub {
+				font-size: 11px;
+				color: var(--muted);
+				font-family: 'Geist Mono', monospace;
+				letter-spacing: 0.02em;
+			}
+			.status-dot {
+				width: 7px;
+				height: 7px;
+				border-radius: 50%;
+				background: var(--green);
+				box-shadow: 0 0 6px var(--green);
+				transition: all 0.3s;
+			}
+			.status-dot.off {
+				background: var(--border-2);
+				box-shadow: none;
+			}
+
+			/* ── MAIN TOGGLE ── */
+			.main-toggle-section {
+				padding: 14px 16px;
+				border-bottom: 1px solid var(--border);
+			}
+			.main-toggle-row {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+			}
+			.main-toggle-label {
+				font-size: 13px;
+				font-weight: 500;
+				color: var(--text);
+			}
+			.main-toggle-desc {
+				font-size: 11px;
+				color: var(--muted);
+				margin-top: 2px;
+			}
+
+			/* ── TOGGLE SWITCH ── */
+			.toggle {
+				position: relative;
+				width: 36px;
+				height: 20px;
+				cursor: pointer;
+				flex-shrink: 0;
+			}
+			.toggle input {
+				display: none;
+			}
+			.toggle-track {
+				width: 100%;
+				height: 100%;
+				background: var(--border-2);
+				border-radius: 999px;
+				border: 1px solid var(--border-2);
+				transition:
+					background 0.2s,
+					border-color 0.2s;
+				position: relative;
+			}
+			.toggle-thumb {
+				position: absolute;
+				top: 2px;
+				left: 2px;
+				width: 14px;
+				height: 14px;
+				background: var(--text);
+				border-radius: 50%;
+				transition:
+					transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+					background 0.2s;
+				box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+			}
+			.toggle input:checked ~ .toggle-track {
+				background: var(--green);
+				border-color: var(--green);
+			}
+			.toggle input:checked ~ .toggle-track .toggle-thumb {
+				transform: translateX(16px);
+			}
+
+			/* ── GAMES SECTION ── */
+			.section {
+				padding: 12px 16px;
+				border-bottom: 1px solid var(--border);
+			}
+			.section-label {
+				font-size: 10px;
+				font-weight: 600;
+				letter-spacing: 0.08em;
+				text-transform: uppercase;
+				color: var(--muted);
+				margin-bottom: 10px;
+			}
+			.game-row {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				padding: 7px 10px;
+				border-radius: var(--radius-sm);
+				border: 1px solid var(--border);
+				background: var(--surface);
+				margin-bottom: 6px;
+				transition:
+					border-color 0.15s,
+					background 0.15s;
+				cursor: default;
+			}
+			.game-row:last-child {
+				margin-bottom: 0;
+			}
+			.game-row:hover {
+				border-color: var(--border-2);
+			}
+			.game-row.active {
+				border-color: #27272a;
+				background: #111113;
+			}
+			.game-left {
+				display: flex;
+				align-items: center;
+				gap: 9px;
+			}
+			.game-icon {
+				width: 22px;
+				height: 22px;
+				border-radius: 5px;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				font-size: 12px;
+				flex-shrink: 0;
+			}
+			.game-icon.queens {
+				background: #1d1d3a;
+			}
+			.game-icon.tango {
+				background: #1d2d1d;
+			}
+			.game-icon.zip {
+				background: #2d1d1d;
+			}
+			.game-name {
+				font-size: 12px;
+				font-weight: 500;
+				color: var(--text);
+			}
+			.game-tag {
+				font-size: 10px;
+				font-family: 'Geist Mono', monospace;
+				color: var(--muted);
+				background: #1c1c1f;
+				border: 1px solid var(--border);
+				padding: 1px 5px;
+				border-radius: 3px;
+				margin-left: 6px;
+			}
+
+			/* ── SETTINGS ── */
+			.setting-row {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				padding: 6px 0;
+			}
+			.setting-row + .setting-row {
+				border-top: 1px solid var(--border);
+			}
+			.setting-left {
+				display: flex;
+				flex-direction: column;
+			}
+			.setting-name {
+				font-size: 12px;
+				font-weight: 500;
+				color: var(--text);
+			}
+			.setting-desc {
+				font-size: 11px;
+				color: var(--muted);
+			}
+
+			/* ── SPEED SLIDER ── */
+			.slider-row {
+				padding: 6px 0;
+				border-top: 1px solid var(--border);
+			}
+			.slider-header {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				margin-bottom: 8px;
+			}
+			.slider-label {
+				font-size: 12px;
+				font-weight: 500;
+				color: var(--text);
+			}
+			.slider-value {
+				font-size: 11px;
+				font-family: 'Geist Mono', monospace;
+				color: var(--muted);
+				background: var(--surface);
+				border: 1px solid var(--border);
+				padding: 1px 6px;
+				border-radius: 3px;
+				min-width: 52px;
+				text-align: center;
+			}
+			input[type='range'] {
+				appearance: none;
+				width: 100%;
+				height: 4px;
+				background: var(--border-2);
+				border-radius: 2px;
+				outline: none;
+				cursor: pointer;
+			}
+			input[type='range']::-webkit-slider-thumb {
+				-webkit-appearance: none;
+				width: 14px;
+				height: 14px;
+				border-radius: 50%;
+				background: var(--text);
+				border: 2px solid var(--bg);
+				box-shadow: 0 0 0 1px var(--border-2);
+				transition: box-shadow 0.15s;
+			}
+			input[type='range']:hover::-webkit-slider-thumb {
+				box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
+			}
+
+			/* ── SOLVE BUTTON ── */
+			.solve-section {
+				padding: 12px 16px;
+				border-bottom: 1px solid var(--border);
+			}
+			.btn-solve {
+				width: 100%;
+				padding: 9px 16px;
+				border-radius: var(--radius-sm);
+				border: 1px solid var(--border-2);
+				background: var(--text);
+				color: var(--bg);
+				font-family: 'Geist', sans-serif;
+				font-size: 12px;
+				font-weight: 600;
+				letter-spacing: 0.01em;
+				cursor: pointer;
+				transition:
+					opacity 0.15s,
+					transform 0.1s;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				gap: 7px;
+			}
+			.btn-solve:hover {
+				opacity: 0.88;
+			}
+			.btn-solve:active {
+				transform: scale(0.98);
+			}
+			.btn-solve:disabled {
+				opacity: 0.3;
+				cursor: not-allowed;
+				transform: none;
+			}
+			.btn-solve svg {
+				width: 13px;
+				height: 13px;
+			}
+
+			/* ── STATUS BAR ── */
+			.status-bar {
+				padding: 10px 16px;
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+			}
+			.status-text {
+				font-size: 11px;
+				font-family: 'Geist Mono', monospace;
+				color: var(--muted);
+				display: flex;
+				align-items: center;
+				gap: 6px;
+			}
+			.status-text.success {
+				color: var(--green);
+			}
+			.status-text.error {
+				color: var(--red);
+			}
+			.status-indicator {
+				width: 5px;
+				height: 5px;
+				border-radius: 50%;
+				background: currentColor;
+			}
+			.version {
+				font-size: 10px;
+				font-family: 'Geist Mono', monospace;
+				color: var(--border-2);
+			}
+
+			/* ── ANIMATIONS ── */
+			@keyframes pulse {
+				0%,
+				100% {
+					opacity: 1;
+				}
+				50% {
+					opacity: 0.4;
+				}
+			}
+			.solving .status-indicator {
+				animation: pulse 1s ease-in-out infinite;
+			}
+
+			/* disabled overlay */
+			.games-overlay {
+				opacity: 0.4;
+				pointer-events: none;
+				transition: opacity 0.2s;
+			}
+		</style>
+	</head>
+	<body>
+		<!-- HEADER -->
+		<div class="header">
+			<div class="header-left">
+				<div class="logo">
+					<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+						<path d="M3 8L6.5 11.5L13 4.5" stroke="#09090b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+					</svg>
+				</div>
+				<div>
+					<div class="header-title">Game Solver</div>
+					<div class="header-sub">linkedin · v1.0.0</div>
+				</div>
+			</div>
+			<div class="status-dot" id="headerDot"></div>
+		</div>
+
+		<!-- MASTER TOGGLE -->
+		<div class="main-toggle-section">
+			<div class="main-toggle-row">
+				<div>
+					<div class="main-toggle-label">Enable Solver</div>
+					<div class="main-toggle-desc">Activate on LinkedIn Games pages</div>
+				</div>
+				<label class="toggle">
+					<input type="checkbox" id="masterToggle" checked />
+					<div class="toggle-track">
+						<div class="toggle-thumb"></div>
+					</div>
+				</label>
+			</div>
+		</div>
+
+		<!-- GAMES -->
+		<div class="section" id="gamesSection">
+			<div class="section-label">Games</div>
+
+			<div class="game-row active">
+				<div class="game-left">
+					<div class="game-icon queens">♛</div>
+					<span class="game-name">Queens</span>
+					<span class="game-tag">ready</span>
+				</div>
+				<label class="toggle">
+					<input type="checkbox" id="toggleQueens" checked />
+					<div class="toggle-track"><div class="toggle-thumb"></div></div>
+				</label>
+			</div>
+
+			<div class="game-row active">
+				<div class="game-left">
+					<div class="game-icon tango">☯</div>
+					<span class="game-name">Tango</span>
+					<span class="game-tag">ready</span>
+				</div>
+				<label class="toggle">
+					<input type="checkbox" id="toggleTango" checked />
+					<div class="toggle-track"><div class="toggle-thumb"></div></div>
+				</label>
+			</div>
+
+			<div class="game-row active">
+				<div class="game-left">
+					<div class="game-icon zip">⚡</div>
+					<span class="game-name">Zip</span>
+					<span class="game-tag">ready</span>
+				</div>
+				<label class="toggle">
+					<input type="checkbox" id="toggleZip" checked />
+					<div class="toggle-track"><div class="toggle-thumb"></div></div>
+				</label>
+			</div>
+		</div>
+
+		<!-- SETTINGS -->
+		<div class="section" id="settingsSection">
+			<div class="section-label">Settings</div>
+
+			<div class="slider-row">
+				<div class="slider-header">
+					<span class="slider-label">Solve speed</span>
+					<span class="slider-value" id="speedLabel">250 ms</span>
+				</div>
+				<input type="range" id="speedSlider" min="0" max="4" step="1" value="2" />
+			</div>
+
+			<div class="setting-row" style="margin-top: 8px">
+				<div class="setting-left">
+					<span class="setting-name">Auto-solve on load</span>
+					<span class="setting-desc">Run solver when game is detected</span>
+				</div>
+				<label class="toggle">
+					<input type="checkbox" id="autoSolve" />
+					<div class="toggle-track"><div class="toggle-thumb"></div></div>
+				</label>
+			</div>
+
+			<div class="setting-row">
+				<div class="setting-left">
+					<span class="setting-name">Highlight solution</span>
+					<span class="setting-desc">Show answer before clicking</span>
+				</div>
+				<label class="toggle">
+					<input type="checkbox" id="highlight" checked />
+					<div class="toggle-track"><div class="toggle-thumb"></div></div>
+				</label>
+			</div>
+
+			<div class="setting-row">
+				<div class="setting-left">
+					<span class="setting-name">Human-like delay</span>
+					<span class="setting-desc">Add random jitter between clicks</span>
+				</div>
+				<label class="toggle">
+					<input type="checkbox" id="jitter" checked />
+					<div class="toggle-track"><div class="toggle-thumb"></div></div>
+				</label>
+			</div>
+		</div>
+
+		<!-- SOLVE BUTTON -->
+		<div class="solve-section">
+			<button class="btn-solve" id="solveBtn">
+				<svg viewBox="0 0 13 13" fill="none">
+					<path d="M2 6.5L5 9.5L11 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+				</svg>
+				Solve Current Game
+			</button>
+		</div>
+
+		<!-- STATUS -->
+		<div class="status-bar">
+			<div class="status-text" id="statusText">
+				<div class="status-indicator"></div>
+				<span id="statusMsg">Waiting for game…</span>
+			</div>
+			<span class="version">v1.0.0</span>
+		</div>
+
+		<script>
+			const speedSteps = [50, 100, 250, 500, 1000];
+			const speedLabels = ['50 ms', '100 ms', '250 ms', '500 ms', '1000 ms'];
+
+			const masterToggle = document.getElementById('masterToggle');
+			const headerDot = document.getElementById('headerDot');
+			const gamesSection = document.getElementById('gamesSection');
+			const settingsSection = document.getElementById('settingsSection');
+			const solveBtn = document.getElementById('solveBtn');
+			const speedSlider = document.getElementById('speedSlider');
+			const speedLabel = document.getElementById('speedLabel');
+			const statusText = document.getElementById('statusText');
+			const statusMsg = document.getElementById('statusMsg');
+
+			// master toggle
+			masterToggle.addEventListener('change', () => {
+				const on = masterToggle.checked;
+				headerDot.classList.toggle('off', !on);
+				gamesSection.classList.toggle('games-overlay', !on);
+				settingsSection.classList.toggle('games-overlay', !on);
+				solveBtn.disabled = !on;
+				setStatus(on ? 'idle' : 'off');
+			});
+
+			// speed slider
+			speedSlider.addEventListener('input', () => {
+				speedLabel.textContent = speedLabels[speedSlider.value];
+			});
+
+			// solve button
+			solveBtn.addEventListener('click', () => {
+				setStatus('solving');
+				solveBtn.disabled = true;
+				solveBtn.innerHTML = `
+        <svg viewBox="0 0 13 13" fill="none" style="animation:spin 0.7s linear infinite">
+          <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.5" stroke-dasharray="20" stroke-dashoffset="10"/>
+        </svg>
+        Solving…`;
+
+				// simulate solve (replace with real content script message)
+				setTimeout(() => {
+					setStatus('success');
+					solveBtn.disabled = false;
+					solveBtn.innerHTML = `
+          <svg viewBox="0 0 13 13" fill="none">
+            <path d="M2 6.5L5 9.5L11 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Solve Current Game`;
+				}, 1800);
+			});
+
+			function setStatus(state) {
+				statusText.className = 'status-text';
+				if (state === 'idle') {
+					statusMsg.textContent = 'Waiting for game…';
+				}
+				if (state === 'off') {
+					statusMsg.textContent = 'Solver disabled';
+				}
+				if (state === 'solving') {
+					statusText.classList.add('solving');
+					statusMsg.textContent = 'Solving…';
+				}
+				if (state === 'success') {
+					statusText.classList.add('success');
+					statusMsg.textContent = 'Solved!';
+					setTimeout(() => setStatus('idle'), 3000);
+				}
+				if (state === 'error') {
+					statusText.classList.add('error');
+					statusMsg.textContent = 'No solution found';
+					setTimeout(() => setStatus('idle'), 3000);
+				}
+			}
+
+			// load saved settings (chrome.storage in real extension)
+			// for demo, just init from current state
+			setStatus('idle');
+		</script>
+
+		<style>
+			@keyframes spin {
+				to {
+					transform: rotate(360deg);
+				}
+			}
+		</style>
+	</body>
+</html>
