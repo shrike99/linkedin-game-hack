@@ -23,9 +23,7 @@
 				--muted: #71717a;
 				--text: #fafafa;
 				--text-2: #a1a1aa;
-				--accent: #e4e4e7;
 				--green: #22c55e;
-				--green-dim: #16a34a22;
 				--amber: #f59e0b;
 				--blue: #3b82f6;
 				--red: #ef4444;
@@ -44,7 +42,6 @@
 				overflow: hidden;
 			}
 
-			/* ── HEADER ── */
 			.header {
 				padding: 16px 16px 12px;
 				border-bottom: 1px solid var(--border);
@@ -74,13 +71,11 @@
 				font-size: 13px;
 				font-weight: 600;
 				letter-spacing: -0.01em;
-				color: var(--text);
 			}
 			.header-sub {
 				font-size: 11px;
 				color: var(--muted);
 				font-family: 'Geist Mono', monospace;
-				letter-spacing: 0.02em;
 			}
 			.status-dot {
 				width: 7px;
@@ -95,7 +90,6 @@
 				box-shadow: none;
 			}
 
-			/* ── MAIN TOGGLE ── */
 			.main-toggle-section {
 				padding: 14px 16px;
 				border-bottom: 1px solid var(--border);
@@ -108,7 +102,6 @@
 			.main-toggle-label {
 				font-size: 13px;
 				font-weight: 500;
-				color: var(--text);
 			}
 			.main-toggle-desc {
 				font-size: 11px;
@@ -116,7 +109,6 @@
 				margin-top: 2px;
 			}
 
-			/* ── TOGGLE SWITCH ── */
 			.toggle {
 				position: relative;
 				width: 36px;
@@ -146,9 +138,7 @@
 				height: 14px;
 				background: var(--text);
 				border-radius: 50%;
-				transition:
-					transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-					background 0.2s;
+				transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 				box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 			}
 			.toggle input:checked ~ .toggle-track {
@@ -159,7 +149,6 @@
 				transform: translateX(16px);
 			}
 
-			/* ── GAMES SECTION ── */
 			.section {
 				padding: 12px 16px;
 				border-bottom: 1px solid var(--border);
@@ -172,6 +161,7 @@
 				color: var(--muted);
 				margin-bottom: 10px;
 			}
+
 			.game-row {
 				display: flex;
 				align-items: center;
@@ -184,17 +174,12 @@
 				transition:
 					border-color 0.15s,
 					background 0.15s;
-				cursor: default;
 			}
 			.game-row:last-child {
 				margin-bottom: 0;
 			}
 			.game-row:hover {
 				border-color: var(--border-2);
-			}
-			.game-row.active {
-				border-color: #27272a;
-				background: #111113;
 			}
 			.game-left {
 				display: flex;
@@ -220,10 +205,12 @@
 			.game-icon.zip {
 				background: #2d1d1d;
 			}
+			.game-icon.sudoku {
+				background: #1d2a2d;
+			}
 			.game-name {
 				font-size: 12px;
 				font-weight: 500;
-				color: var(--text);
 			}
 			.game-tag {
 				font-size: 10px;
@@ -236,7 +223,6 @@
 				margin-left: 6px;
 			}
 
-			/* ── SETTINGS ── */
 			.setting-row {
 				display: flex;
 				align-items: center;
@@ -253,14 +239,12 @@
 			.setting-name {
 				font-size: 12px;
 				font-weight: 500;
-				color: var(--text);
 			}
 			.setting-desc {
 				font-size: 11px;
 				color: var(--muted);
 			}
 
-			/* ── SPEED SLIDER ── */
 			.slider-row {
 				padding: 6px 0;
 				border-top: 1px solid var(--border);
@@ -274,7 +258,6 @@
 			.slider-label {
 				font-size: 12px;
 				font-weight: 500;
-				color: var(--text);
 			}
 			.slider-value {
 				font-size: 11px;
@@ -288,7 +271,7 @@
 				text-align: center;
 			}
 			input[type='range'] {
-				appearance: none;
+				-webkit-appearance: none;
 				width: 100%;
 				height: 4px;
 				background: var(--border-2);
@@ -304,13 +287,11 @@
 				background: var(--text);
 				border: 2px solid var(--bg);
 				box-shadow: 0 0 0 1px var(--border-2);
-				transition: box-shadow 0.15s;
 			}
 			input[type='range']:hover::-webkit-slider-thumb {
 				box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
 			}
 
-			/* ── SOLVE BUTTON ── */
 			.solve-section {
 				padding: 12px 16px;
 				border-bottom: 1px solid var(--border);
@@ -325,7 +306,6 @@
 				font-family: 'Geist', sans-serif;
 				font-size: 12px;
 				font-weight: 600;
-				letter-spacing: 0.01em;
 				cursor: pointer;
 				transition:
 					opacity 0.15s,
@@ -351,7 +331,6 @@
 				height: 13px;
 			}
 
-			/* ── STATUS BAR ── */
 			.status-bar {
 				padding: 10px 16px;
 				display: flex;
@@ -384,7 +363,6 @@
 				color: var(--border-2);
 			}
 
-			/* ── ANIMATIONS ── */
 			@keyframes pulse {
 				0%,
 				100% {
@@ -397,8 +375,12 @@
 			.solving .status-indicator {
 				animation: pulse 1s ease-in-out infinite;
 			}
+			@keyframes spin {
+				to {
+					transform: rotate(360deg);
+				}
+			}
 
-			/* disabled overlay */
 			.games-overlay {
 				opacity: 0.4;
 				pointer-events: none;
@@ -407,11 +389,10 @@
 		</style>
 	</head>
 	<body>
-		<!-- HEADER -->
 		<div class="header">
 			<div class="header-left">
 				<div class="logo">
-					<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+					<svg viewBox="0 0 16 16" fill="none">
 						<path d="M3 8L6.5 11.5L13 4.5" stroke="#09090b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
 					</svg>
 				</div>
@@ -423,7 +404,6 @@
 			<div class="status-dot" id="headerDot"></div>
 		</div>
 
-		<!-- MASTER TOGGLE -->
 		<div class="main-toggle-section">
 			<div class="main-toggle-row">
 				<div>
@@ -432,18 +412,15 @@
 				</div>
 				<label class="toggle">
 					<input type="checkbox" id="masterToggle" checked />
-					<div class="toggle-track">
-						<div class="toggle-thumb"></div>
-					</div>
+					<div class="toggle-track"><div class="toggle-thumb"></div></div>
 				</label>
 			</div>
 		</div>
 
-		<!-- GAMES -->
 		<div class="section" id="gamesSection">
 			<div class="section-label">Games</div>
 
-			<div class="game-row active">
+			<div class="game-row">
 				<div class="game-left">
 					<div class="game-icon queens">♛</div>
 					<span class="game-name">Queens</span>
@@ -455,7 +432,7 @@
 				</label>
 			</div>
 
-			<div class="game-row active">
+			<div class="game-row">
 				<div class="game-left">
 					<div class="game-icon tango">☯</div>
 					<span class="game-name">Tango</span>
@@ -467,7 +444,7 @@
 				</label>
 			</div>
 
-			<div class="game-row active">
+			<div class="game-row">
 				<div class="game-left">
 					<div class="game-icon zip">⚡</div>
 					<span class="game-name">Zip</span>
@@ -478,9 +455,20 @@
 					<div class="toggle-track"><div class="toggle-thumb"></div></div>
 				</label>
 			</div>
+
+			<div class="game-row">
+				<div class="game-left">
+					<div class="game-icon sudoku">#</div>
+					<span class="game-name">Sudoku</span>
+					<span class="game-tag">ready</span>
+				</div>
+				<label class="toggle">
+					<input type="checkbox" id="toggleSudoku" checked />
+					<div class="toggle-track"><div class="toggle-thumb"></div></div>
+				</label>
+			</div>
 		</div>
 
-		<!-- SETTINGS -->
 		<div class="section" id="settingsSection">
 			<div class="section-label">Settings</div>
 
@@ -526,7 +514,6 @@
 			</div>
 		</div>
 
-		<!-- SOLVE BUTTON -->
 		<div class="solve-section">
 			<button class="btn-solve" id="solveBtn">
 				<svg viewBox="0 0 13 13" fill="none">
@@ -536,7 +523,6 @@
 			</button>
 		</div>
 
-		<!-- STATUS -->
 		<div class="status-bar">
 			<div class="status-text" id="statusText">
 				<div class="status-indicator"></div>
@@ -559,7 +545,56 @@
 			const statusText = document.getElementById('statusText');
 			const statusMsg = document.getElementById('statusMsg');
 
-			// master toggle
+			// ── LOAD SAVED SETTINGS ──
+			chrome.storage.sync.get(
+				{
+					enabled: true,
+					autoSolve: false,
+					highlight: true,
+					jitter: true,
+					speed: 2,
+					games: { queens: true, tango: true, zip: true, sudoku: true },
+				},
+				(s) => {
+					masterToggle.checked = s.enabled;
+					document.getElementById('autoSolve').checked = s.autoSolve;
+					document.getElementById('highlight').checked = s.highlight;
+					document.getElementById('jitter').checked = s.jitter;
+					document.getElementById('toggleQueens').checked = s.games.queens;
+					document.getElementById('toggleTango').checked = s.games.tango;
+					document.getElementById('toggleZip').checked = s.games.zip;
+					document.getElementById('toggleSudoku').checked = s.games.sudoku;
+					speedSlider.value = s.speed;
+					speedLabel.textContent = speedLabels[s.speed];
+					if (!s.enabled) {
+						headerDot.classList.add('off');
+						gamesSection.classList.add('games-overlay');
+						settingsSection.classList.add('games-overlay');
+						solveBtn.disabled = true;
+					}
+					setStatus('idle');
+				},
+			);
+
+			// ── SAVE ON CHANGE ──
+			function saveSettings() {
+				chrome.storage.sync.set({
+					enabled: masterToggle.checked,
+					autoSolve: document.getElementById('autoSolve').checked,
+					highlight: document.getElementById('highlight').checked,
+					jitter: document.getElementById('jitter').checked,
+					speed: parseInt(speedSlider.value),
+					games: {
+						queens: document.getElementById('toggleQueens').checked,
+						tango: document.getElementById('toggleTango').checked,
+						zip: document.getElementById('toggleZip').checked,
+						sudoku: document.getElementById('toggleSudoku').checked,
+					},
+				});
+			}
+
+			document.querySelectorAll('input').forEach((el) => el.addEventListener('change', saveSettings));
+
 			masterToggle.addEventListener('change', () => {
 				const on = masterToggle.checked;
 				headerDot.classList.toggle('off', !on);
@@ -569,41 +604,36 @@
 				setStatus(on ? 'idle' : 'off');
 			});
 
-			// speed slider
 			speedSlider.addEventListener('input', () => {
 				speedLabel.textContent = speedLabels[speedSlider.value];
 			});
 
-			// solve button
+			// ── SOLVE BUTTON ──
 			solveBtn.addEventListener('click', () => {
 				setStatus('solving');
 				solveBtn.disabled = true;
 				solveBtn.innerHTML = `
         <svg viewBox="0 0 13 13" fill="none" style="animation:spin 0.7s linear infinite">
           <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.5" stroke-dasharray="20" stroke-dashoffset="10"/>
-        </svg>
-        Solving…`;
+        </svg>Solving…`;
 
-				// simulate solve (replace with real content script message)
-				setTimeout(() => {
-					setStatus('success');
-					solveBtn.disabled = false;
-					solveBtn.innerHTML = `
-          <svg viewBox="0 0 13 13" fill="none">
-            <path d="M2 6.5L5 9.5L11 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          Solve Current Game`;
-				}, 1800);
+				chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+					chrome.tabs.sendMessage(tab.id, { type: 'SOLVE' }, (response) => {
+						const ok = response?.success;
+						setStatus(ok ? 'success' : 'error');
+						solveBtn.disabled = false;
+						solveBtn.innerHTML = `
+            <svg viewBox="0 0 13 13" fill="none">
+              <path d="M2 6.5L5 9.5L11 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>Solve Current Game`;
+					});
+				});
 			});
 
 			function setStatus(state) {
 				statusText.className = 'status-text';
-				if (state === 'idle') {
-					statusMsg.textContent = 'Waiting for game…';
-				}
-				if (state === 'off') {
-					statusMsg.textContent = 'Solver disabled';
-				}
+				if (state === 'idle') statusMsg.textContent = 'Waiting for game…';
+				if (state === 'off') statusMsg.textContent = 'Solver disabled';
 				if (state === 'solving') {
 					statusText.classList.add('solving');
 					statusMsg.textContent = 'Solving…';
@@ -619,18 +649,6 @@
 					setTimeout(() => setStatus('idle'), 3000);
 				}
 			}
-
-			// load saved settings (chrome.storage in real extension)
-			// for demo, just init from current state
-			setStatus('idle');
 		</script>
-
-		<style>
-			@keyframes spin {
-				to {
-					transform: rotate(360deg);
-				}
-			}
-		</style>
 	</body>
 </html>

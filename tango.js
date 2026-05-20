@@ -283,17 +283,17 @@ function solve(board) {
 	return null; // BOTH GUESSES LED TO CONTRADICTION, TRIGGER BACKTRACK
 }
 
-console.log('Initial board:');
-printBoard(board);
+//console.log('Initial board:');
+//printBoard(board);
 
-start = performance.now();
-const result = solve(cloneBoard(board));
-end = performance.now();
+//start = performance.now();
+//const result = solve(cloneBoard(board));
+//end = performance.now();
 
-if (result) {
-	console.log('\nSolved!');
-	printBoard(result);
-	console.log('TIME TAKEN: ' + (end - start) + 'ms');
-} else {
-	console.log('\nNo solution found.');
-}
+//if (result) {
+//	console.log('\nSolved!');
+//	printBoard(result);
+//	console.log('TIME TAKEN: ' + (end - start) + 'ms');
+//} else {
+//	console.log('\nNo solution found.');
+//}

@@ -108,18 +108,18 @@ function printBoard(board) {
 	console.log(bottom);
 }
 
-console.log('Initial board:');
-printBoard(board);
+//console.log('Initial board:');
+//printBoard(board);
 
-const start = performance.now();
-const solved = solve(board);
-const end = performance.now();
+//const start = performance.now();
+//const solved = solve(board);
+//const end = performance.now();
 
-if (solved) {
-	console.log('\nSolved!');
-	printBoard(board);
-} else {
-	console.log('\nNo solution found.');
-}
+//if (solved) {
+//	console.log('\nSolved!');
+//	printBoard(board);
+//} else {
+//	console.log('\nNo solution found.');
+//}
 
-console.log('TIME TAKEN: ' + (end - start).toFixed(3) + 'ms');
+//console.log('TIME TAKEN: ' + (end - start).toFixed(3) + 'ms');

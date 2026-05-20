@@ -188,10 +188,10 @@ function printSolved(board, result) {
 	printBoard(boardWithPath, colourMap);
 }
 
-printBoard(board);
+//printBoard(board);
 
-const result = solve(board);
+//const result = solve(board);
 
-console.log('Solved! Path:');
+//console.log('Solved! Path:');
 
-printSolved(board, result);
+//printSolved(board, result);

@@ -67,9 +67,9 @@ board = [
 	[0, 3, 5, 6, 1, 0],
 ];
 
-start = performance.now();
-solve(board);
-end = performance.now();
+//start = performance.now();
+//solve(board);
+//end = performance.now();
 
-printBoard(board);
-console.log('TIME TAKEN: ' + (end - start) + 'ms');
+//printBoard(board);
+//console.log('TIME TAKEN: ' + (end - start) + 'ms');
