@@ -332,10 +332,50 @@ function highlightSolution(game, result) {
 		});
 	}
 	if (game === 'sudoku') {
+		// clear old highlights
+		document.querySelectorAll('.solver-sudoku-overlay').forEach((el) => el.remove());
+
 		for (let r = 0; r < 6; r++) {
 			for (let c = 0; c < 6; c++) {
 				const cell = getCellElement(r, c);
-				if (cell) cell.style.outline = '2px solid #3b82f6';
+				if (!cell) continue;
+
+				// don't touch prefilled cells
+				if (cell.classList.contains('sudoku-cell-prefilled')) {
+					continue;
+				}
+
+				const solvedValue = result[r][c];
+				if (!solvedValue) continue;
+
+				cell.style.position = 'relative';
+
+				// subtle cell highlight
+				const overlay = document.createElement('div');
+
+				overlay.className = 'solver-sudoku-overlay';
+
+				Object.assign(overlay.style, {
+					position: 'absolute',
+					inset: '2px',
+					borderRadius: '6px',
+					background: 'rgba(59,130,246,0.10)',
+					boxShadow: 'inset 0 0 0 2px rgba(59,130,246,0.75)',
+					display: 'flex',
+					alignItems: 'center',
+					justifyContent: 'center',
+					fontSize: '28px',
+					fontWeight: '700',
+					color: '#60a5fa',
+					pointerEvents: 'none',
+					zIndex: '20',
+					fontFamily: 'var(--artdeco-font-family-sans)',
+				});
+
+				// show solved number
+				overlay.textContent = String(solvedValue);
+
+				cell.appendChild(overlay);
 			}
 		}
 	}
@@ -413,13 +453,12 @@ async function applyZip(path, settings) {
 }
 
 async function applySudoku(board, settings) {
-	console.log(board);
 	for (let r = 0; r < 6; r++) {
 		for (let c = 0; c < 6; c++) {
 			const cell = getCellElement(r, c);
 			if (!cell) continue;
 
-			// skip prefilled cells
+			// skip original clues
 			if (cell.classList.contains('sudoku-cell-prefilled')) {
 				continue;
 			}
@@ -427,19 +466,59 @@ async function applySudoku(board, settings) {
 			const value = board[r][c];
 			if (!value) continue;
 
-			// click cell
-			cell.click();
+			// remove visual overlay before click
+			const overlay = cell.querySelector('.solver-sudoku-overlay');
+			if (overlay) overlay.remove();
 
-			await sleep(30);
+			// select cell
+			cell.dispatchEvent(
+				new MouseEvent('mousedown', {
+					bubbles: true,
+				}),
+			);
 
-			// click number button
-			const numBtn = document.querySelector(`.sudoku-input-button[data-number="${value}"]`);
+			cell.dispatchEvent(
+				new MouseEvent('mouseup', {
+					bubbles: true,
+				}),
+			);
 
-			if (numBtn) {
-				numBtn.click();
-			}
+			cell.dispatchEvent(
+				new MouseEvent('click', {
+					bubbles: true,
+				}),
+			);
 
-			await sleep(settings.speed);
+			// let LinkedIn register selection
+			await sleep(80);
+
+			// click matching number button
+			const button = document.querySelector(`.sudoku-input-button[data-number="${value}"]`);
+
+			if (!button) continue;
+
+			button.dispatchEvent(
+				new MouseEvent('mousedown', {
+					bubbles: true,
+				}),
+			);
+
+			button.dispatchEvent(
+				new MouseEvent('mouseup', {
+					bubbles: true,
+				}),
+			);
+
+			button.dispatchEvent(
+				new MouseEvent('click', {
+					bubbles: true,
+				}),
+			);
+
+			// human-ish pacing
+			const delay = settings.jitter ? settings.speed + Math.random() * 80 - 40 : settings.speed;
+
+			await sleep(Math.max(60, delay));
 		}
 	}
 }

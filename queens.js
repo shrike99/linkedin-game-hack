@@ -1,4 +1,3 @@
-// ── QUEENS SOLVER ────────────────────────────────────────────────────────────
 const queensSolver = (() => {
 	function isValid(board, row, col) {
 		for (let r = 0; r < row; r++) {

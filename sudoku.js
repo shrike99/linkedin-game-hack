@@ -1,4 +1,3 @@
-// ── SUDOKU SOLVER ────────────────────────────────────────────────────────────
 const sudokuSolver = (() => {
 	function isValid(board, row, column, number) {
 		for (let i = 0; i < 6; i++) {

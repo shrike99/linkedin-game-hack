@@ -1,4 +1,3 @@
-// ── ZIP SOLVER ───────────────────────────────────────────────────────────────
 const zipSolver = (() => {
 	function buildWallSet(walls) {
 		const set = new Set();
@@ -27,12 +26,18 @@ const zipSolver = (() => {
 		const [startRow, startColumn] = checkpoints[1];
 		const path = [[startRow, startColumn]];
 		const visited = new Set([`${startRow},${startColumn}`]);
-		const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+		const directions = [
+			[-1, 0],
+			[1, 0],
+			[0, -1],
+			[0, 1],
+		];
 
 		function backtrack(r, c, nextWaypoint) {
 			if (path.length === totalCells) return nextWaypoint > numCheckpoints;
 			for (const [dr, dc] of directions) {
-				const newRow = r + dr, newColumn = c + dc;
+				const newRow = r + dr,
+					newColumn = c + dc;
 				const key = `${newRow},${newColumn}`;
 				if (newRow < 0 || newRow >= n || newColumn < 0 || newColumn >= n) continue;
 				if (visited.has(key)) continue;
