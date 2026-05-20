@@ -470,12 +470,17 @@
 		</div>
 
 		<div class="section" id="settingsSection">
-			<div class="section-label">Settings</div>
-
-			<div class="slider-row">
+			<div class="section-label section-label-collapsible" id="settingsToggle" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:0;">
+				<span>Settings</span>
+				<svg id="settingsChevron" viewBox="0 0 12 12" fill="none" style="width:12px;height:12px;transition:transform 0.2s;flex-shrink:0;">
+					<path d="M2 4L6 8L10 4" stroke="var(--muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+				</svg>
+			</div>
+			<div id="settingsContent" style="margin-top:10px;">
+			<div class="slider-row" style="border-top:none;padding-top:0;">
 				<div class="slider-header">
 					<span class="slider-label">Solve speed</span>
-					<span class="slider-value" id="speedLabel">250 ms</span>
+					<span class="slider-value" id="speedLabel">1000 ms</span>
 				</div>
 				<input type="range" id="speedSlider" min="0" max="4" step="1" value="2" />
 			</div>
@@ -512,7 +517,8 @@
 					<div class="toggle-track"><div class="toggle-thumb"></div></div>
 				</label>
 			</div>
-		</div>
+			</div><!-- end settingsContent -->
+		</div><!-- end settingsSection -->
 
 		<div class="solve-section">
 			<button class="btn-solve" id="solveBtn">

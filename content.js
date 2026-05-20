@@ -68,7 +68,15 @@ async function handleSolve() {
 
 		if (!result) return { success: false, error: 'No solution found' };
 
-		if (settings.highlight) highlightSolution(game, result);
+		// Always highlight when enabled
+		if (settings.highlight) {
+			highlightSolution(game, result);
+		}
+
+		// If we're only highlighting, stop here for Tango
+		if (game === 'tango' && settings.highlight && !settings.autoSolve) {
+			return { success: true, highlighted: true };
+		}
 
 		// wait at least one speed tick before starting clicks
 		const minDelay = settings.speed;
@@ -108,11 +116,8 @@ function scrapeBoard(game) {
 
 function scrapeTango() {
 	const grid = document.querySelector('[data-testid="interactive-grid"]');
-	const cellEls = grid.querySelectorAll('[data-testid^="cell-"]');
+	const cellEls = grid.querySelectorAll('[data-testid^="cell-"][role="button"]');
 	const size = Math.round(Math.sqrt(cellEls.length));
-	if (size * size !== cellEls.length) {
-		console.warn(`[Tango] Expected square grid but got ${cellEls.length} cells (√ ≈ ${Math.sqrt(cellEls.length)}). Proceeding with size=${size}.`);
-	}
 	const cells = Array.from({ length: size }, () => Array(size).fill(0));
 	const constraints = [];
 
@@ -213,10 +218,22 @@ function highlightSolution(game, result) {
 		});
 	}
 	if (game === 'tango') {
+		const SUN = 1,
+			MOON = 2;
 		for (let r = 0; r < result.size; r++) {
 			for (let c = 0; c < result.size; c++) {
 				const cell = getCellElement(r, c);
-				if (cell) cell.style.outline = '2px solid #22c55e';
+				if (!cell) continue;
+				// Skip prefilled cells (aria-disabled="true")
+				if (cell.getAttribute('aria-disabled') === 'true') continue;
+				const val = result.cells[r][c];
+				if (val === SUN) {
+					cell.style.outline = '2px solid #f59e0b';
+					cell.style.backgroundColor = 'rgba(245, 158, 11, 0.18)';
+				} else if (val === MOON) {
+					cell.style.outline = '2px solid #818cf8';
+					cell.style.backgroundColor = 'rgba(129, 140, 248, 0.18)';
+				}
 			}
 		}
 	}
@@ -252,7 +269,7 @@ async function applyQueens(board, settings) {
 async function applyTango(board, settings) {
 	// only click empty cells — prefilled ones (aria-disabled="true") can't be clicked
 	const grid = document.querySelector('[data-testid="interactive-grid"]');
-	const cellEls = grid.querySelectorAll('[data-testid^="cell-"]');
+	const cellEls = grid.querySelectorAll('[data-testid^="cell-"][role="button"]');
 
 	for (const cellEl of cellEls) {
 		// skip prefilled cells
@@ -266,14 +283,38 @@ async function applyTango(board, settings) {
 		const col = parseInt(parts[2]);
 
 		const target = board.cells[row][col]; // 1 = SUN, 2 = MOON
+		if (target === 0) continue;
 
-		// each click cycles: empty → sun → moon → empty
-		// so click once for sun, twice for moon
-		const clicks = target === 1 ? 1 : target === 2 ? 2 : 0;
-		for (let i = 0; i < clicks; i++) {
-			cellEl.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-			await sleep(settings.jitter ? settings.speed + Math.random() * 80 - 40 : settings.speed);
+		const rect = cellEl.getBoundingClientRect();
+		const x = rect.left + rect.width / 2;
+		const y = rect.top + rect.height / 2;
+		const realTarget = document.elementFromPoint(x, y);
+		const baseOpts = { bubbles: true, cancelable: true, clientX: x, clientY: y, screenX: x, screenY: y, pointerId: 1, pointerType: 'mouse', isPrimary: true };
+		const cellStart = performance.now();
+
+		if (target === 1) {
+			// SUN: one left click (empty -> sun)
+			realTarget.dispatchEvent(new PointerEvent('pointerover', baseOpts));
+			realTarget.dispatchEvent(new PointerEvent('pointerenter', baseOpts));
+			realTarget.dispatchEvent(new PointerEvent('pointerdown', baseOpts));
+			realTarget.dispatchEvent(new MouseEvent('mousedown', { ...baseOpts, button: 0, buttons: 1 }));
+			realTarget.dispatchEvent(new PointerEvent('pointerup', baseOpts));
+			realTarget.dispatchEvent(new MouseEvent('mouseup', { ...baseOpts, button: 0, buttons: 0 }));
+			realTarget.dispatchEvent(new MouseEvent('click', { ...baseOpts, button: 0, buttons: 0 }));
+		} else {
+			// MOON: right-click (empty -> moon directly)
+			const rightOpts = { ...baseOpts, button: 2, buttons: 2 };
+			realTarget.dispatchEvent(new PointerEvent('pointerover', baseOpts));
+			realTarget.dispatchEvent(new PointerEvent('pointerenter', baseOpts));
+			realTarget.dispatchEvent(new PointerEvent('pointerdown', rightOpts));
+			realTarget.dispatchEvent(new MouseEvent('mousedown', rightOpts));
+			realTarget.dispatchEvent(new PointerEvent('pointerup', rightOpts));
+			realTarget.dispatchEvent(new MouseEvent('mouseup', rightOpts));
+			realTarget.dispatchEvent(new MouseEvent('contextmenu', rightOpts));
 		}
+
+		const elapsed = performance.now() - cellStart;
+		await sleep(Math.max(30, settings.speed - elapsed));
 	}
 }
 

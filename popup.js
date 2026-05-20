@@ -1,5 +1,5 @@
-const speedSteps = [50, 100, 250, 500, 1000];
-const speedLabels = ['50 ms', '100 ms', '250 ms', '500 ms', '1000 ms'];
+const speedSteps = [1000, 1500, 2000, 3000, 5000];
+const speedLabels = ['1000 ms', '1500 ms', '2000 ms', '3000 ms', '5000 ms'];
 
 const masterToggle = document.getElementById('masterToggle');
 const headerDot = document.getElementById('headerDot');
@@ -11,6 +11,19 @@ const speedLabel = document.getElementById('speedLabel');
 const statusText = document.getElementById('statusText');
 const statusMsg = document.getElementById('statusMsg');
 
+// ── COLLAPSIBLE SETTINGS ──
+const settingsToggle = document.getElementById('settingsToggle');
+const settingsContent = document.getElementById('settingsContent');
+const settingsChevron = document.getElementById('settingsChevron');
+let settingsCollapsed = false;
+
+settingsToggle.addEventListener('click', () => {
+	settingsCollapsed = !settingsCollapsed;
+	settingsContent.style.display = settingsCollapsed ? 'none' : '';
+	settingsChevron.style.transform = settingsCollapsed ? 'rotate(-90deg)' : '';
+	chrome.storage.sync.set({ settingsCollapsed });
+});
+
 // ── LOAD SAVED SETTINGS ──
 chrome.storage.sync.get(
 	{
@@ -20,6 +33,7 @@ chrome.storage.sync.get(
 		jitter: true,
 		speed: 2,
 		games: { queens: true, tango: true, zip: true, sudoku: true },
+		settingsCollapsed: false,
 	},
 	(s) => {
 		masterToggle.checked = s.enabled;
@@ -37,6 +51,12 @@ chrome.storage.sync.get(
 			gamesSection.classList.add('games-overlay');
 			settingsSection.classList.add('games-overlay');
 			solveBtn.disabled = true;
+		}
+		// Restore collapsed state (default: expanded)
+		settingsCollapsed = !!s.settingsCollapsed;
+		if (settingsCollapsed) {
+			settingsContent.style.display = 'none';
+			settingsChevron.style.transform = 'rotate(-90deg)';
 		}
 		setStatus('idle');
 	},
