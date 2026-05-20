@@ -52,7 +52,7 @@ function isBoardReady() {
 	const game = detectGame();
 	if (game === 'tango') return !!document.querySelector('[data-testid="interactive-grid"]');
 	if (game === 'queens') return !!document.querySelector('[data-testid="queens-cell"]'); // TODO: verify
-	if (game === 'zip') return !!document.querySelector('[data-testid="zip-cell"]'); // TODO: verify
+	if (game === 'zip') return !!document.querySelector('[data-testid="zip-game-container"]');
 	if (game === 'sudoku') return !!document.querySelector('[data-sudoku-grid="true"]');
 
 	return false;
@@ -226,17 +226,36 @@ function scrapeQueens() {
 }
 
 function scrapeZip() {
-	// TODO: inspect LinkedIn's zip DOM and fill real selectors
-	const cells = document.querySelectorAll('[data-testid="zip-cell"]');
-	const size = Math.round(Math.sqrt(cells.length));
+	const gridEl = document.querySelector('[data-testid="interactive-grid"]');
+
+	if (!gridEl) return null;
+
+	const cellEls = gridEl.querySelectorAll('[data-cell-idx]');
+
+	const size = Math.round(Math.sqrt(cellEls.length));
+
 	const grid = Array.from({ length: size }, () => Array(size).fill(0));
-	cells.forEach((cell) => {
-		const row = parseInt(cell.dataset.row);
-		const col = parseInt(cell.dataset.col);
-		const val = cell.dataset.checkpoint ? parseInt(cell.dataset.checkpoint) : 0;
-		grid[row][col] = val;
+
+	cellEls.forEach((cell) => {
+		const idx = parseInt(cell.dataset.cellIdx);
+
+		const row = Math.floor(idx / size);
+		const col = idx % size;
+
+		const content = cell.querySelector('[data-cell-content]');
+
+		if (content) {
+			const value = parseInt(content.textContent.trim());
+
+			grid[row][col] = Number.isNaN(value) ? 0 : value;
+		}
 	});
-	return { size, cells: grid, walls: [] };
+
+	return {
+		size,
+		cells: grid,
+		walls: [],
+	};
 }
 
 function scrapeSudoku() {
@@ -326,9 +345,62 @@ function highlightSolution(game, result) {
 		}
 	}
 	if (game === 'zip') {
-		result.forEach(([row, col]) => {
+		// clear old zip highlights
+		document.querySelectorAll('.solver-zip-overlay').forEach((el) => el.remove());
+
+		// result is ordered path coordinates
+		result.forEach(([row, col], index) => {
 			const cell = getCellElement(row, col);
-			if (cell) cell.style.outline = '2px solid #3b82f6';
+			if (!cell) return;
+
+			cell.style.position = 'relative';
+
+			const overlay = document.createElement('div');
+			overlay.className = 'solver-zip-overlay';
+
+			Object.assign(overlay.style, {
+				position: 'absolute',
+				inset: '3px',
+				border: '3px solid rgba(59,130,246,0.9)',
+				borderRadius: '10px',
+				pointerEvents: 'none',
+				zIndex: '50',
+				boxSizing: 'border-box',
+			});
+
+			cell.appendChild(overlay);
+
+			// connection line to next point
+			const next = result[index + 1];
+			if (!next) return;
+
+			const [nextRow, nextCol] = next;
+
+			const line = document.createElement('div');
+			line.className = 'solver-zip-overlay';
+
+			Object.assign(line.style, {
+				position: 'absolute',
+				background: 'rgba(59,130,246,0.9)',
+				pointerEvents: 'none',
+				zIndex: '40',
+				transformOrigin: 'left center',
+			});
+
+			const dx = nextCol - col;
+			const dy = nextRow - row;
+
+			const length = Math.sqrt(dx * dx + dy * dy) * cell.offsetWidth;
+
+			const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+
+			line.style.width = `${length}px`;
+			line.style.height = '6px';
+			line.style.left = `${cell.offsetWidth / 2}px`;
+			line.style.top = `${cell.offsetHeight / 2 - 3}px`;
+			line.style.transform = `rotate(${angle}deg)`;
+
+			cell.appendChild(line);
 		});
 	}
 	if (game === 'sudoku') {
@@ -447,8 +519,56 @@ async function applyTango(board, settings) {
 }
 
 async function applyZip(path, settings) {
-	for (const [row, col] of path) {
-		await clickCell(row, col, settings);
+	if (!path?.length) return;
+
+	const first = getCellElement(path[0][0], path[0][1]);
+
+	if (!first) return;
+
+	// focus starting cell
+	first.focus();
+	first.click();
+
+	await sleep(50);
+
+	for (let i = 1; i < path.length; i++) {
+		const [pr, pc] = path[i - 1];
+		const [r, c] = path[i];
+
+		const dr = r - pr;
+		const dc = c - pc;
+
+		let key = null;
+
+		if (dr === -1) key = 'ArrowUp';
+		else if (dr === 1) key = 'ArrowDown';
+		else if (dc === -1) key = 'ArrowLeft';
+		else if (dc === 1) key = 'ArrowRight';
+
+		if (!key) continue;
+
+		const event = new KeyboardEvent('keydown', {
+			key,
+			code: key,
+			bubbles: true,
+			cancelable: true,
+		});
+
+		document.activeElement.dispatchEvent(event);
+
+		// LinkedIn listens to keyup too
+		const upEvent = new KeyboardEvent('keyup', {
+			key,
+			code: key,
+			bubbles: true,
+			cancelable: true,
+		});
+
+		document.activeElement.dispatchEvent(upEvent);
+
+		const delay = settings.jitter ? settings.speed + Math.random() * 40 : settings.speed;
+
+		await sleep(Math.max(25, delay));
 	}
 }
 
@@ -540,6 +660,23 @@ function getCellElement(row, col) {
 		const idx = row * 6 + col;
 
 		return document.querySelector(`.sudoku-cell[data-cell-idx="${idx}"]`);
+	}
+
+	// Zip
+	if (game === 'zip') {
+		const grid = document.querySelector('[data-testid="interactive-grid"]');
+
+		if (!grid) return null;
+
+		const size = Math.sqrt(grid.querySelectorAll('[data-cell-idx]').length);
+
+		const idx = row * size + col;
+
+		const cell = grid.querySelector(`[data-cell-idx="${idx}"]`);
+
+		if (cell) cell.tabIndex = 0;
+
+		return cell;
 	}
 
 	// generic fallback
