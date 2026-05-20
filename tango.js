@@ -12,6 +12,8 @@ const board = {
 		[0, 0, 0, 0, 0, 1],
 	],
 
+	size: 6,
+
 	// 0 MEANS =
 	// 1 MEANS x
 	constraints: [
@@ -30,16 +32,16 @@ function solve(board) {
 
 // APPLIES BASIC RULES TO THE BOARD (DEDUCE EVERYTHING POSSIBLE FROM CURRENT POSITION)
 function applyRules(board) {
-	let changed = false;
+	let changed = true;
 
-	while ((changed = false)) {
+	while (changed == true) {
 		changed = false;
 
 		// IF A ROW/COLUMN ALREADY HAS 3 SUNS/MOONS, FILL THE REST WITH THE OPPOSITE
 		changed = propagateBalance(board);
 
 		// IF TWO CONSECUTIVE CELLS ARE THE SAME, THE ADJACENT CELLS MUST BE THE OPPOSITE
-		changed = changed || propogateTwoRule(board);
+		changed = changed || propagateTwoRule(board);
 
 		changed = changed || applyConstraints(board);
 	}
