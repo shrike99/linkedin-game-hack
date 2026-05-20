@@ -26,56 +26,6 @@ const board = {
 	],
 };
 
-function printBoard(board) {
-	const n = board.size;
-
-	// build wall set for O(1) lookup
-	const wallSet = buildWallSet(board.walls);
-
-	// top border
-	let top = '┌';
-	for (let c = 0; c < n; c++) {
-		top += '───';
-		top += c < n - 1 ? '┬' : '┐';
-	}
-	console.log(top);
-
-	for (let r = 0; r < n; r++) {
-		// cell row
-		let row = '│';
-		for (let c = 0; c < n; c++) {
-			const val = board.cells[r][c];
-			row += val !== 0 ? ` ${val} ` : ' . ';
-			if (c < n - 1) {
-				// vertical wall between (r,c) and (r,c+1)
-				row += hasWall(wallSet, r, c, r, c + 1) ? '┃' : '│';
-			}
-		}
-		row += '│';
-		console.log(row);
-
-		// horizontal separator row
-		if (r < n - 1) {
-			let sep = '├';
-			for (let c = 0; c < n; c++) {
-				// horizontal wall between (r,c) and (r+1,c)
-				sep += hasWall(wallSet, r, c, r + 1, c) ? '━━━' : '───';
-				if (c < n - 1) sep += '┼';
-			}
-			sep += '┤';
-			console.log(sep);
-		}
-	}
-
-	// bottom border
-	let bottom = '└';
-	for (let c = 0; c < n; c++) {
-		bottom += '───';
-		bottom += c < n - 1 ? '┴' : '┘';
-	}
-	console.log(bottom);
-}
-
 function buildWallSet(walls) {
 	const set = new Set();
 	for (const { from, to } of walls) {
@@ -163,31 +113,79 @@ function solve(board) {
 	return null;
 }
 
-function printSolved(board) {
-	// build a direction map for pretty printing
+const RESET = '\x1b[0m';
+const GREEN = '\x1b[42m'; // green background
+const RED = '\x1b[41m'; // red background
+
+function printBoard(board, colourMap = {}) {
+	const n = board.size;
+	const wallSet = buildWallSet(board.walls);
+
+	let top = '┌';
+	for (let c = 0; c < n; c++) {
+		top += '───';
+		top += c < n - 1 ? '┬' : '┐';
+	}
+	console.log(top);
+
+	for (let r = 0; r < n; r++) {
+		let row = '│';
+		for (let c = 0; c < n; c++) {
+			const val = board.cells[r][c];
+			const colour = colourMap[`${r},${c}`] || '';
+			const cell = val !== 0 ? ` ${val} ` : ' . ';
+			row += colour + cell + (colour ? RESET : '');
+			if (c < n - 1) row += hasWall(wallSet, r, c, r, c + 1) ? '┃' : '│';
+		}
+		row += '│';
+		console.log(row);
+
+		if (r < n - 1) {
+			let sep = '├';
+			for (let c = 0; c < n; c++) {
+				sep += hasWall(wallSet, r, c, r + 1, c) ? '━━━' : '───';
+				if (c < n - 1) sep += '┼';
+			}
+			sep += '┤';
+			console.log(sep);
+		}
+	}
+
+	let bottom = '└';
+	for (let c = 0; c < n; c++) {
+		bottom += '───';
+		bottom += c < n - 1 ? '┴' : '┘';
+	}
+	console.log(bottom);
+}
+
+function printSolved(board, result) {
 	const arrows = { '-1,0': '↑', '1,0': '↓', '0,-1': '←', '0,1': '→' };
 	const pathMap = new Map();
+	const colourMap = {};
+
 	for (let i = 0; i < result.length - 1; i++) {
 		const [r, c] = result[i];
 		const [nr, nc] = result[i + 1];
 		pathMap.set(`${r},${c}`, arrows[`${nr - r},${nc - c}`]);
 	}
-	// last cell
-	const [lr, lc] = result[result.length - 1];
-	pathMap.set(`${lr},${lc}`, '■');
 
-	// override printBoard to show path arrows
+	// mark start green, end red
+	const [sr, sc] = result[0];
+	const [er, ec] = result[result.length - 1];
+	colourMap[`${sr},${sc}`] = GREEN;
+	colourMap[`${er},${ec}`] = RED;
+
 	const boardWithPath = {
 		...board,
 		cells: board.cells.map((row, r) =>
 			row.map((val, c) => {
-				if (val == 1) return val; // only keep start
-				return pathMap.get(`${r},${c}`) ?? '.';
+				return pathMap.get(`${r},${c}`) ?? (val !== 0 ? val : '.');
 			}),
 		),
 	};
 
-	console.log(printBoard(boardWithPath));
+	printBoard(boardWithPath, colourMap);
 }
 
 printBoard(board);
@@ -196,4 +194,4 @@ const result = solve(board);
 
 console.log('Solved! Path:');
 
-printSolved(board);
+printSolved(board, result);
