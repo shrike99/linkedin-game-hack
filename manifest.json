@@ -17,5 +17,21 @@
 			"matches": ["https://www.linkedin.com/games/*"],
 			"js": ["queens.js", "tango.js", "sudoku.js", "zip.js", "content.js"]
 		}
-	]
+	],
+
+	"icons": {
+		"16": "icons/icon16.png",
+		"32": "icons/icon32.png",
+		"48": "icons/icon48.png",
+		"128": "icons/icon128.png"
+	},
+
+	"action": {
+		"default_popup": "index.html",
+		"default_icon": {
+			"16": "icons/icon16.png",
+			"32": "icons/icon32.png",
+			"48": "icons/icon48.png"
+		}
+	}
 }
