@@ -1,0 +1,10 @@
+{
+	"manifest_version": 3,
+	"name": "LinkedIn Games Solver",
+	"content_scripts": [
+		{
+			"matches": ["https://www.linkedin.com/games/*"],
+			"js": ["queens.js", "tango.js", "zip.js", "content.js"]
+		}
+	]
+}
