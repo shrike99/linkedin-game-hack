@@ -791,115 +791,131 @@ async function applyZip(path, settings) {
 	if (!path?.length) return;
 
 	const grid = getZipGrid();
-	console.log('[Zip] grid element:', grid);
-	console.log('[Zip] path length:', path.length, 'first:', path[0], 'last:', path[path.length - 1]);
-
-	// Wait for game JS to initialise
-	let zipWait = 0;
-	while (zipWait < 3000) {
-		const startMarker = grid?.querySelector('.trail-cell--filled, [class*="circle-start"], [data-cell-start]');
-		if (startMarker) {
-			console.log('[Zip] start marker found after', zipWait, 'ms:', startMarker.className, startMarker.dataset);
-			break;
-		}
-		await sleep(100);
-		zipWait += 100;
-	}
-	if (zipWait >= 3000) console.warn('[Zip] timed out waiting for start marker — proceeding anyway');
-
-	// Log all cells in the path to verify getCellElement is finding them
-	console.log('[Zip] checking path cells...');
-	for (let i = 0; i < path.length; i++) {
-		const [r, c] = path[i];
-		const cell = getCellElement(r, c);
-		if (!cell) {
-			console.error(`[Zip] path[${i}] [${r},${c}] — cell NOT FOUND`);
-		} else {
-			const rect = cell.getBoundingClientRect();
-			console.log(`[Zip] path[${i}] [${r},${c}] — cell found, class="${cell.className}", rect=${JSON.stringify({ top: rect.top.toFixed(0), left: rect.left.toFixed(0), w: rect.width.toFixed(0), h: rect.height.toFixed(0) })}`);
-		}
-	}
-
-	function fireOn(el, x, y, type, extra = {}) {
-		const opts = {
-			bubbles: true,
-			cancelable: true,
-			clientX: x,
-			clientY: y,
-			screenX: x,
-			screenY: y,
-			pointerId: 1,
-			pointerType: 'mouse',
-			isPrimary: true,
-			...extra,
-		};
-		if (type === 'pointermove' || type === 'pointerdown' || type === 'pointerup') {
-			el.dispatchEvent(new PointerEvent(type, opts));
-		} else {
-			el.dispatchEvent(new MouseEvent(type, opts));
-		}
-	}
-
-	function cellInfo(row, col) {
-		const cell = getCellElement(row, col);
-		if (!cell) return null;
-		const rect = cell.getBoundingClientRect();
-		const x = rect.left + rect.width / 2;
-		const y = rect.top + rect.height / 2;
-		return { cell, x, y };
-	}
-
-	const startInfo = cellInfo(path[0][0], path[0][1]);
-	if (!startInfo) {
-		console.error('[Zip] start cell not found, aborting');
+	if (!grid) {
+		console.error('[Zip] grid not found');
 		return;
 	}
 
-	// Scroll the grid into view so coordinates are meaningful
-	grid?.scrollIntoView({ block: 'nearest' });
-	await sleep(50);
+	console.log('[Zip] starting drag solve');
 
-	// Re-read start coords after scroll
-	const startRect = startInfo.cell.getBoundingClientRect();
-	const sx = startRect.left + startRect.width / 2;
-	const sy = startRect.top + startRect.height / 2;
-	console.log('[Zip] firing pointerdown on start cell at', sx.toFixed(0), sy.toFixed(0), 'class:', startInfo.cell.className);
+	// wait until game listeners are attached
+	let wait = 0;
 
-	fireOn(startInfo.cell, sx, sy, 'pointerdown', { button: 0, buttons: 1 });
-	fireOn(startInfo.cell, sx, sy, 'mousedown', { button: 0, buttons: 1 });
+	while (wait < 4000) {
+		const ready = grid.querySelector('.trail-cell--filled') || grid.querySelector('[class*="circle-start"]') || grid.querySelector('[data-cell-start]');
 
-	await sleep(30);
+		if (ready) break;
 
-	// Check if drag started — game usually adds a class or changes the start cell
-	console.log('[Zip] after pointerdown, start cell class:', startInfo.cell.className);
+		await sleep(100);
+		wait += 100;
+	}
+
+	function getCellCenter(row, col) {
+		const cell = getCellElement(row, col);
+		if (!cell) return null;
+
+		const rect = cell.getBoundingClientRect();
+
+		return {
+			cell,
+			x: rect.left + rect.width / 2,
+			y: rect.top + rect.height / 2,
+		};
+	}
+
+	function fire(type, x, y, buttons = 1) {
+		const target = document.elementFromPoint(x, y) || document.body;
+
+		const opts = {
+			bubbles: true,
+			cancelable: true,
+			composed: true,
+
+			clientX: x,
+			clientY: y,
+
+			screenX: x,
+			screenY: y,
+
+			pointerId: 1,
+			pointerType: 'mouse',
+			isPrimary: true,
+
+			buttons,
+			button: buttons ? 0 : -1,
+		};
+
+		target.dispatchEvent(new PointerEvent(type, opts));
+
+		const mouseType = type.replace('pointer', 'mouse');
+
+		target.dispatchEvent(new MouseEvent(mouseType, opts));
+	}
+
+	function lerp(a, b, t) {
+		return a + (b - a) * t;
+	}
+
+	grid.scrollIntoView({
+		block: 'center',
+		inline: 'center',
+	});
+
+	await sleep(120);
+
+	const start = getCellCenter(path[0][0], path[0][1]);
+
+	if (!start) {
+		console.error('[Zip] missing start');
+		return;
+	}
+
+	grid.focus?.();
+
+	await sleep(60);
+
+	// START DRAG
+	fire('pointerdown', start.x, start.y, 1);
+	fire('mousedown', start.x, start.y, 1);
+
+	await sleep(60);
+
+	let prevX = start.x;
+	let prevY = start.y;
 
 	for (let i = 1; i < path.length; i++) {
-		const info = cellInfo(path[i][0], path[i][1]);
-		if (!info) {
-			console.warn(`[Zip] pointermove[${i}] cell not found, skipping`);
-			continue;
+		const next = getCellCenter(path[i][0], path[i][1]);
+
+		if (!next) continue;
+
+		// many small moves is REQUIRED for signed-out zip
+		const steps = 14;
+
+		for (let s = 1; s <= steps; s++) {
+			const t = s / steps;
+
+			const x = lerp(prevX, next.x, t);
+			const y = lerp(prevY, next.y, t);
+
+			fire('pointermove', x, y, 1);
+			fire('mousemove', x, y, 1);
+
+			await sleep(5);
 		}
 
-		if (i <= 3 || i === path.length - 1) {
-			console.log(`[Zip] pointermove[${i}] [${path[i][0]},${path[i][1]}] at ${info.x.toFixed(0)},${info.y.toFixed(0)} class:${info.cell.className}`);
-		}
+		prevX = next.x;
+		prevY = next.y;
 
-		fireOn(info.cell, info.x, info.y, 'pointermove', { buttons: 1 });
-		fireOn(info.cell, info.x, info.y, 'mousemove', { buttons: 1 });
-
-		const delay = settings.jitter ? settings.speed + Math.random() * 15 : settings.speed;
-		await sleep(Math.max(10, delay));
+		await sleep(Math.max(10, settings.speed / 2));
 	}
 
-	const endInfo = cellInfo(path[path.length - 1][0], path[path.length - 1][1]);
-	if (endInfo) {
-		console.log('[Zip] firing pointerup on end cell', path[path.length - 1], 'class:', endInfo.cell.className);
-		fireOn(endInfo.cell, endInfo.x, endInfo.y, 'pointerup', { button: 0, buttons: 0 });
-		fireOn(endInfo.cell, endInfo.x, endInfo.y, 'mouseup', { button: 0, buttons: 0 });
-	}
-	console.log('[Zip] done');
+	// END DRAG
+	fire('pointerup', prevX, prevY, 0);
+	fire('mouseup', prevX, prevY, 0);
+	fire('click', prevX, prevY, 0);
+
+	console.log('[Zip] drag completed');
 }
-
 // Returns the current displayed value of a sudoku cell (0 if empty)
 function getSudokuCellValue(cell) {
 	const content = cell.querySelector('.sudoku-cell-content');
