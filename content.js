@@ -7,7 +7,14 @@ function getBoardHash(board) {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+	// With all_frames:true this listener fires in every frame simultaneously.
+	// We only want the frame that actually contains the game to respond.
+	// Returning false (without calling sendResponse) means "not handled here"
+	// so Chrome continues waiting for another frame to respond.
 	if (message.type === 'SOLVE') {
+		// If this frame has no game, silently ignore — let the game frame respond.
+		if (!detectGame()) return false;
+
 		handleSolve(true)
 			.then((response) => {
 				sendResponse(response);
@@ -18,7 +25,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 		return true; // Keep channel open asynchronously
 	}
 	if (message.type === 'GET_GAME') {
-		sendResponse({ game: detectGame() });
+		// Same: only the game frame should reply.
+		const game = detectGame();
+		if (!game) return false;
+		sendResponse({ game });
 		return false;
 	}
 });
