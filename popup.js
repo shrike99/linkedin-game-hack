@@ -52,7 +52,6 @@ chrome.storage.sync.get(
 			settingsSection.classList.add('games-overlay');
 			solveBtn.disabled = true;
 		}
-		// Restore collapsed state (default: expanded)
 		settingsCollapsed = !!s.settingsCollapsed;
 		if (settingsCollapsed) {
 			settingsContent.style.display = 'none';
@@ -104,19 +103,36 @@ solveBtn.addEventListener('click', () => {
         </svg>Solving…`;
 
 	chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+		if (!tab) {
+			setStatus('error', 'No active tab');
+			resetSolveBtn();
+			return;
+		}
+
 		chrome.tabs.sendMessage(tab.id, { type: 'SOLVE' }, (response) => {
-			const ok = response?.success;
-			setStatus(ok ? 'success' : 'error');
-			solveBtn.disabled = false;
-			solveBtn.innerHTML = `
-            <svg viewBox="0 0 13 13" fill="none">
-              <path d="M2 6.5L5 9.5L11 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>Solve Current Game`;
+			if (chrome.runtime.lastError) {
+				// The port disconnected or content.js isn't injected
+				setStatus('error', 'Connection failed (Refresh page)');
+			} else if (response?.success) {
+				setStatus('success');
+			} else {
+				// Display the EXACT error sent from content.js
+				setStatus('error', response?.error || 'Unknown Error');
+			}
+			resetSolveBtn();
 		});
 	});
 });
 
-function setStatus(state) {
+function resetSolveBtn() {
+	solveBtn.disabled = false;
+	solveBtn.innerHTML = `
+        <svg viewBox="0 0 13 13" fill="none">
+          <path d="M2 6.5L5 9.5L11 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>Solve Current Game`;
+}
+
+function setStatus(state, customMsg) {
 	statusText.className = 'status-text';
 	if (state === 'idle') statusMsg.textContent = 'Waiting for game…';
 	if (state === 'off') statusMsg.textContent = 'Solver disabled';
@@ -131,7 +147,8 @@ function setStatus(state) {
 	}
 	if (state === 'error') {
 		statusText.classList.add('error');
-		statusMsg.textContent = 'No solution found';
-		setTimeout(() => setStatus('idle'), 3000);
+		// Use the custom error message if provided, otherwise default to No solution
+		statusMsg.textContent = customMsg || 'No solution found';
+		setTimeout(() => setStatus('idle'), 4000);
 	}
 }
