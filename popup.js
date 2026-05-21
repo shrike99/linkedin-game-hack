@@ -1,5 +1,5 @@
-const speedSteps = [1000, 1500, 2000, 3000, 5000];
-const speedLabels = ['1000 ms', '1500 ms', '2000 ms', '3000 ms', '5000 ms'];
+const speedSteps = [20, 40, 80, 120, 200];
+const speedLabels = ['20 ms (fastest)', '40 ms', '80 ms', '120 ms', '200 ms (slowest)'];
 
 const masterToggle = document.getElementById('masterToggle');
 const headerDot = document.getElementById('headerDot');

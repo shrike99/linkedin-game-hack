@@ -14,6 +14,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 chrome.storage.sync.get(['enabled', 'autoSolve'], ({ enabled, autoSolve }) => {
 	if (!enabled || !autoSolve) return;
 	waitForBoard()
+		.then(() => sleep(800))
 		.then(() => handleSolve())
 		.catch((err) => console.warn('[Solver] Auto-solve failed:', err));
 });
@@ -32,8 +33,11 @@ document.addEventListener(
 
 		chrome.storage.sync.get(['enabled', 'autoSolve'], ({ enabled, autoSolve }) => {
 			if (!enabled) return;
-			// Always at least highlight; autoSolve controls whether to also apply
+			// Always at least highlight; autoSolve controls whether to also apply.
+			// After the board appears in the DOM, wait an extra settle period so the
+			// game's own JS finishes attaching event listeners before we start clicking.
 			waitForBoard(10000)
+				.then(() => sleep(autoSolve ? 800 : 0))
 				.then(() => handleSolve(autoSolve))
 				.catch((err) => console.warn('[Solver] Post-start-button solve failed:', err));
 		});
@@ -52,6 +56,20 @@ function detectGame() {
 	if (url.includes('tango')) return 'tango';
 	if (url.includes('zip')) return 'zip';
 	if (url.includes('sudoku')) return 'sudoku';
+	// DOM-based fallback for signed-out pages where URL may differ
+	if (document.querySelector('[data-trail-grid="true"]')) return 'zip';
+	if (document.querySelector('#queens-grid')) return 'queens';
+	if (document.querySelector('[data-testid="interactive-grid"] [data-cell-idx]')) {
+		// Distinguish queens vs zip by checking for color regions in aria-labels
+		const firstCell = document.querySelector('[data-cell-idx="0"]');
+		if (firstCell) {
+			const label = firstCell.getAttribute('aria-label') || '';
+			if (/color/i.test(label)) return 'queens';
+			if (firstCell.querySelector('[data-cell-content], .trail-cell-content')) return 'zip';
+		}
+	}
+	if (document.querySelector('[data-sudoku-grid="true"]')) return 'sudoku';
+	if (document.querySelector('[data-testid="interactive-grid"] [data-testid^="cell-"]')) return 'tango';
 	return null;
 }
 
@@ -81,16 +99,31 @@ function isBoardReady() {
 		return cells.length >= 4;
 	}
 	if (game === 'queens') {
-		const grid = document.querySelector('[data-testid="interactive-grid"]');
+		const grid = getQueensGrid();
 		if (!grid) return false;
 		return grid.querySelectorAll('[data-cell-idx]').length >= 4;
 	}
 	if (game === 'zip') {
-		const grid = document.querySelector('[data-testid="interactive-grid"]');
+		const grid = getZipGrid();
 		if (!grid) return false;
-		return grid.querySelectorAll('[data-cell-idx]').length >= 4;
+		const cells = grid.querySelectorAll('[data-cell-idx]');
+		if (cells.length < 4) return false;
+		// The start cell gets .trail-cell--filled / trail-cell-segment--circle-start (signed-out)
+		// or a similar marker (signed-in) only once the game JS has fully initialised.
+		// Without this, pointerdown events land before listeners are attached.
+		const hasStartCell = !!grid.querySelector('.trail-cell--filled, [class*="circle-start"], [data-cell-start]');
+		// Signed-in zip: the grid gets a tabindex and role once ready
+		const gridIsInteractive = grid.getAttribute('tabindex') !== null || grid.getAttribute('role') !== null;
+		return hasStartCell || gridIsInteractive;
 	}
-	if (game === 'sudoku') return !!document.querySelector('[data-sudoku-grid="true"]');
+	if (game === 'sudoku') {
+		const grid = document.querySelector('[data-sudoku-grid="true"]');
+		if (!grid) return false;
+		// Wait for cells AND the number input buttons — both must exist before we can solve
+		const hasCells = grid.querySelectorAll('.sudoku-cell, [data-cell-idx]').length >= 4;
+		const hasButtons = !!document.querySelector('.sudoku-input-button[data-number]');
+		return hasCells && hasButtons;
+	}
 
 	return false;
 }
@@ -168,7 +201,7 @@ async function handleSolve(forceSolve = false) {
 			};
 		}
 
-		await applySolution(game, result, settings);
+		await applySolution(game, result, settings, board);
 
 		return { success: true };
 	} catch (e) {
@@ -192,7 +225,8 @@ function getSettings() {
 				speed: 2,
 				games: { queens: true, tango: true, zip: true, sudoku: true },
 			},
-			(s) => resolve({ ...s, speed: [50, 100, 250, 500, 1000][s.speed] }),
+			// Speed steps: 20, 40, 80, 120, 200 ms — fast enough to feel instant while respecting timing
+			(s) => resolve({ ...s, speed: [20, 40, 80, 120, 200][s.speed] }),
 		);
 	});
 }
@@ -202,6 +236,20 @@ function scrapeBoard(game) {
 	if (game === 'tango') return scrapeTango();
 	if (game === 'zip') return scrapeZip();
 	if (game === 'sudoku') return scrapeSudoku();
+}
+
+// Returns the queens grid element regardless of signed-in vs signed-out DOM variant
+// Signed-in:  [data-testid="interactive-grid"]
+// Signed-out: #queens-grid
+function getQueensGrid() {
+	return document.querySelector('[data-testid="interactive-grid"]') || document.querySelector('#queens-grid');
+}
+
+// Returns the zip/trail grid element regardless of signed-in vs signed-out DOM variant
+// Signed-in:  [data-testid="interactive-grid"]
+// Signed-out: [data-trail-grid="true"] .trail-grid
+function getZipGrid() {
+	return document.querySelector('[data-testid="interactive-grid"]') || document.querySelector('[data-trail-grid="true"] .trail-grid');
 }
 
 // Returns the tango grid element regardless of signed-in vs signed-out DOM variant
@@ -290,7 +338,7 @@ function scrapeTango() {
 }
 
 function scrapeQueens() {
-	const grid = document.querySelector('[data-testid="interactive-grid"]');
+	const grid = getQueensGrid();
 
 	if (!grid) {
 		throw new Error('Queens grid not found');
@@ -347,7 +395,7 @@ function scrapeQueens() {
 }
 
 function scrapeZip() {
-	const gridEl = document.querySelector('[data-testid="interactive-grid"]');
+	const gridEl = getZipGrid();
 
 	if (!gridEl) return null;
 
@@ -363,7 +411,9 @@ function scrapeZip() {
 		const row = Math.floor(idx / size);
 		const col = idx % size;
 
-		const content = cell.querySelector('[data-cell-content]');
+		// Signed-in:  child element with [data-cell-content] attribute
+		// Signed-out: div.trail-cell-content (text content only, no attribute)
+		const content = cell.querySelector('[data-cell-content]') || cell.querySelector('.trail-cell-content');
 
 		if (content) {
 			const value = parseInt(content.textContent.trim());
@@ -383,24 +433,40 @@ function scrapeSudoku() {
 	const grid = document.querySelector('[data-sudoku-grid="true"]');
 	if (!grid) return null;
 
-	const cellEls = grid.querySelectorAll('.sudoku-cell');
+	// Signed-in uses .sudoku-cell; signed-out may use a different selector.
+	// Try specific first, fall back to any [data-cell-idx] child.
+	const cellEls = grid.querySelectorAll('.sudoku-cell, [data-cell-idx]');
 
 	const size = 6;
+	// board[r][c] = value (0 = empty/unknown)
+	// prefilled[r][c] = true if this cell is a clue the player cannot change
 	const board = Array.from({ length: size }, () => Array(size).fill(0));
+	const prefilled = Array.from({ length: size }, () => Array(size).fill(false));
 
 	cellEls.forEach((cell) => {
 		const idx = parseInt(cell.dataset.cellIdx);
+		if (isNaN(idx)) return;
 
 		const row = Math.floor(idx / size);
 		const col = idx % size;
 
-		const content = cell.querySelector('.sudoku-cell-content');
-
+		// Read the displayed value from whichever content element exists
+		const content = cell.querySelector('.sudoku-cell-content, [data-cell-content], .trail-cell-content');
 		const value = parseInt(content?.textContent?.trim());
+		const v = Number.isNaN(value) ? 0 : value;
+		board[row][col] = v;
 
-		board[row][col] = Number.isNaN(value) ? 0 : value;
+		// Mark as pre-filled if ANY of these signals are present:
+		// - the signed-in class
+		// - aria-disabled / aria-readonly
+		// - data-prefilled attribute
+		if (cell.classList.contains('sudoku-cell-prefilled') || cell.getAttribute('aria-disabled') === 'true' || cell.getAttribute('aria-readonly') === 'true' || cell.dataset.prefilled === 'true' || cell.dataset.prefilled === '1') {
+			prefilled[row][col] = true;
+		}
 	});
 
+	// Attach prefilled map to board so applySudoku can use it
+	board._prefilled = prefilled;
 	return board;
 }
 
@@ -592,7 +658,7 @@ function highlightSolution(game, result) {
 				if (!cell) continue;
 
 				// don't touch prefilled cells
-				if (cell.classList.contains('sudoku-cell-prefilled')) {
+				if (cell.classList.contains('sudoku-cell-prefilled') || cell.getAttribute('aria-disabled') === 'true' || cell.getAttribute('aria-readonly') === 'true') {
 					continue;
 				}
 
@@ -632,16 +698,37 @@ function highlightSolution(game, result) {
 	}
 }
 
-async function applySolution(game, result, settings) {
+async function applySolution(game, result, settings, originalBoard) {
 	if (game === 'queens') await applyQueens(result, settings);
 	if (game === 'tango') await applyTango(result, settings);
 	if (game === 'zip') await applyZip(result, settings);
-	if (game === 'sudoku') await applySudoku(result, settings);
+	if (game === 'sudoku') await applySudoku(result, settings, originalBoard);
+}
+
+// Checks whether a queens cell has been marked (has a queen SVG or aria-label containing "queen")
+// Works for both signed-in (data-testid grid) and signed-out (#queens-grid) DOM variants
+function queensCellHasQueen(cell) {
+	if (!cell) return false;
+	const label = cell.getAttribute('aria-label') || '';
+	// Both variants update aria-label to start with "Queen" when placed
+	if (/^queen/i.test(label)) return true;
+	// Fallback: queen SVG span is present (signed-out uses .cell-input--queen)
+	if (cell.querySelector('.cell-input--queen')) return true;
+	// Signed-in: data-testid marker
+	if (cell.querySelector('[data-testid*="queen" i]')) return true;
+	return false;
 }
 
 async function applyQueens(board, settings) {
 	for (let row = 0; row < board.size; row++) {
-		await clickCell(row, board.queens[row], settings);
+		const col = board.queens[row];
+		const stepStart = performance.now();
+
+		await clickCellWithVerify(row, col, (cell) => queensCellHasQueen(cell), settings);
+
+		// Pace remaining time so total per-cell time = settings.speed
+		const elapsed = performance.now() - stepStart;
+		await sleep(Math.max(0, settings.speed - elapsed));
 	}
 }
 
@@ -690,129 +777,209 @@ async function applyTango(board, settings) {
 			el.dispatchEvent(new MouseEvent('mouseup', { ...opts, button: 0, buttons: 0 }));
 			el.dispatchEvent(new MouseEvent('click', { ...opts, button: 0, buttons: 0 }));
 
-			await sleep(100); // wait for DOM to update before re-checking
+			// Wait for DOM to update then verify before moving on
+			await sleep(30);
 			attempts++;
 		}
 
 		const elapsed = performance.now() - cellStart;
-		await sleep(Math.max(50, settings.speed - elapsed));
+		await sleep(Math.max(0, settings.speed - elapsed));
 	}
 }
 
 async function applyZip(path, settings) {
 	if (!path?.length) return;
 
-	function cellCenter(row, col) {
+	const grid = getZipGrid();
+	console.log('[Zip] grid element:', grid);
+	console.log('[Zip] path length:', path.length, 'first:', path[0], 'last:', path[path.length - 1]);
+
+	// Wait for game JS to initialise
+	let zipWait = 0;
+	while (zipWait < 3000) {
+		const startMarker = grid?.querySelector('.trail-cell--filled, [class*="circle-start"], [data-cell-start]');
+		if (startMarker) {
+			console.log('[Zip] start marker found after', zipWait, 'ms:', startMarker.className, startMarker.dataset);
+			break;
+		}
+		await sleep(100);
+		zipWait += 100;
+	}
+	if (zipWait >= 3000) console.warn('[Zip] timed out waiting for start marker — proceeding anyway');
+
+	// Log all cells in the path to verify getCellElement is finding them
+	console.log('[Zip] checking path cells...');
+	for (let i = 0; i < path.length; i++) {
+		const [r, c] = path[i];
+		const cell = getCellElement(r, c);
+		if (!cell) {
+			console.error(`[Zip] path[${i}] [${r},${c}] — cell NOT FOUND`);
+		} else {
+			const rect = cell.getBoundingClientRect();
+			console.log(`[Zip] path[${i}] [${r},${c}] — cell found, class="${cell.className}", rect=${JSON.stringify({ top: rect.top.toFixed(0), left: rect.left.toFixed(0), w: rect.width.toFixed(0), h: rect.height.toFixed(0) })}`);
+		}
+	}
+
+	function fireOn(el, x, y, type, extra = {}) {
+		const opts = {
+			bubbles: true,
+			cancelable: true,
+			clientX: x,
+			clientY: y,
+			screenX: x,
+			screenY: y,
+			pointerId: 1,
+			pointerType: 'mouse',
+			isPrimary: true,
+			...extra,
+		};
+		if (type === 'pointermove' || type === 'pointerdown' || type === 'pointerup') {
+			el.dispatchEvent(new PointerEvent(type, opts));
+		} else {
+			el.dispatchEvent(new MouseEvent(type, opts));
+		}
+	}
+
+	function cellInfo(row, col) {
 		const cell = getCellElement(row, col);
 		if (!cell) return null;
 		const rect = cell.getBoundingClientRect();
-		return {
-			x: rect.left + rect.width / 2,
-			y: rect.top + rect.height / 2,
-			target: document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2) || cell,
-		};
+		const x = rect.left + rect.width / 2;
+		const y = rect.top + rect.height / 2;
+		return { cell, x, y };
 	}
 
-	function pointerOpts(x, y, extra = {}) {
-		return { bubbles: true, cancelable: true, clientX: x, clientY: y, screenX: x, screenY: y, pointerId: 1, pointerType: 'mouse', isPrimary: true, ...extra };
+	const startInfo = cellInfo(path[0][0], path[0][1]);
+	if (!startInfo) {
+		console.error('[Zip] start cell not found, aborting');
+		return;
 	}
 
-	const start = cellCenter(path[0][0], path[0][1]);
-	if (!start) return;
+	// Scroll the grid into view so coordinates are meaningful
+	grid?.scrollIntoView({ block: 'nearest' });
+	await sleep(50);
 
-	// pointerdown on the first cell to begin the drag
-	start.target.dispatchEvent(new PointerEvent('pointerdown', pointerOpts(start.x, start.y, { button: 0, buttons: 1 })));
-	start.target.dispatchEvent(new MouseEvent('mousedown', { ...pointerOpts(start.x, start.y), button: 0, buttons: 1 }));
+	// Re-read start coords after scroll
+	const startRect = startInfo.cell.getBoundingClientRect();
+	const sx = startRect.left + startRect.width / 2;
+	const sy = startRect.top + startRect.height / 2;
+	console.log('[Zip] firing pointerdown on start cell at', sx.toFixed(0), sy.toFixed(0), 'class:', startInfo.cell.className);
+
+	fireOn(startInfo.cell, sx, sy, 'pointerdown', { button: 0, buttons: 1 });
+	fireOn(startInfo.cell, sx, sy, 'mousedown', { button: 0, buttons: 1 });
 
 	await sleep(30);
 
-	// pointermove through every subsequent cell in the path
+	// Check if drag started — game usually adds a class or changes the start cell
+	console.log('[Zip] after pointerdown, start cell class:', startInfo.cell.className);
+
 	for (let i = 1; i < path.length; i++) {
-		const pt = cellCenter(path[i][0], path[i][1]);
-		if (!pt) continue;
+		const info = cellInfo(path[i][0], path[i][1]);
+		if (!info) {
+			console.warn(`[Zip] pointermove[${i}] cell not found, skipping`);
+			continue;
+		}
 
-		pt.target.dispatchEvent(new PointerEvent('pointermove', pointerOpts(pt.x, pt.y, { buttons: 1 })));
-		pt.target.dispatchEvent(new MouseEvent('mousemove', { ...pointerOpts(pt.x, pt.y), buttons: 1 }));
+		if (i <= 3 || i === path.length - 1) {
+			console.log(`[Zip] pointermove[${i}] [${path[i][0]},${path[i][1]}] at ${info.x.toFixed(0)},${info.y.toFixed(0)} class:${info.cell.className}`);
+		}
 
-		const delay = settings.jitter ? settings.speed + Math.random() * 40 : settings.speed;
-		await sleep(Math.max(20, delay));
+		fireOn(info.cell, info.x, info.y, 'pointermove', { buttons: 1 });
+		fireOn(info.cell, info.x, info.y, 'mousemove', { buttons: 1 });
+
+		const delay = settings.jitter ? settings.speed + Math.random() * 15 : settings.speed;
+		await sleep(Math.max(10, delay));
 	}
 
-	// pointerup on the last cell to finish the drag
-	const end = cellCenter(path[path.length - 1][0], path[path.length - 1][1]);
-	if (end) {
-		end.target.dispatchEvent(new PointerEvent('pointerup', pointerOpts(end.x, end.y, { button: 0, buttons: 0 })));
-		end.target.dispatchEvent(new MouseEvent('mouseup', { ...pointerOpts(end.x, end.y), button: 0, buttons: 0 }));
+	const endInfo = cellInfo(path[path.length - 1][0], path[path.length - 1][1]);
+	if (endInfo) {
+		console.log('[Zip] firing pointerup on end cell', path[path.length - 1], 'class:', endInfo.cell.className);
+		fireOn(endInfo.cell, endInfo.x, endInfo.y, 'pointerup', { button: 0, buttons: 0 });
+		fireOn(endInfo.cell, endInfo.x, endInfo.y, 'mouseup', { button: 0, buttons: 0 });
 	}
+	console.log('[Zip] done');
 }
 
-async function applySudoku(board, settings) {
+// Returns the current displayed value of a sudoku cell (0 if empty)
+function getSudokuCellValue(cell) {
+	const content = cell.querySelector('.sudoku-cell-content');
+	const v = parseInt(content?.textContent?.trim());
+	return Number.isNaN(v) ? 0 : v;
+}
+
+async function applySudoku(board, settings, originalBoard) {
+	// Use the prefilled map from the original scrape if available.
+	// Falls back to the solved board's own _prefilled, then to DOM class checks.
+	const prefilled = originalBoard?._prefilled || board._prefilled || null;
+
+	// Ensure the number input buttons are present and clickable before starting.
+	// They can appear after the grid itself on slow/autosolve paths.
+	let buttonWait = 0;
+	while (!document.querySelector('.sudoku-input-button[data-number]') && buttonWait < 3000) {
+		await sleep(100);
+		buttonWait += 100;
+	}
+	if (!document.querySelector('.sudoku-input-button[data-number]')) {
+		console.warn('[Sudoku] Input buttons never appeared — aborting');
+		return;
+	}
+
 	for (let r = 0; r < 6; r++) {
 		for (let c = 0; c < 6; c++) {
 			const cell = getCellElement(r, c);
 			if (!cell) continue;
 
-			// skip original clues
-			if (cell.classList.contains('sudoku-cell-prefilled')) {
-				continue;
-			}
+			// Skip if pre-filled — check map first (most reliable), then DOM classes
+			const isPrefilledByMap = prefilled?.[r]?.[c] === true;
+			const isPrefilledByClass = cell.classList.contains('sudoku-cell-prefilled') || cell.getAttribute('aria-disabled') === 'true' || cell.getAttribute('aria-readonly') === 'true' || cell.dataset.prefilled === 'true';
+
+			if (isPrefilledByMap || isPrefilledByClass) continue;
 
 			const value = board[r][c];
 			if (!value) continue;
+
+			// Also skip if cell already shows the correct value (e.g. from a previous partial run)
+			if (getSudokuCellValue(cell) === value) continue;
+
+			const stepStart = performance.now();
 
 			// remove visual overlay before click
 			const overlay = cell.querySelector('.solver-sudoku-overlay');
 			if (overlay) overlay.remove();
 
-			// select cell
-			cell.dispatchEvent(
-				new MouseEvent('mousedown', {
-					bubbles: true,
-				}),
-			);
+			// Select cell — retry until it registers as selected
+			let selected = false;
+			for (let attempt = 0; attempt < 3 && !selected; attempt++) {
+				cell.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+				cell.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+				cell.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+				await sleep(25);
+				// Check selection by seeing if game highlights this cell (aria-selected or similar)
+				selected = cell.getAttribute('aria-selected') === 'true' || cell.classList.contains('sudoku-cell-selected') || cell.classList.contains('selected');
+				if (!selected) await sleep(15);
+			}
 
-			cell.dispatchEvent(
-				new MouseEvent('mouseup', {
-					bubbles: true,
-				}),
-			);
-
-			cell.dispatchEvent(
-				new MouseEvent('click', {
-					bubbles: true,
-				}),
-			);
-
-			// let LinkedIn register selection
-			await sleep(80);
-
-			// click matching number button
+			// Click matching number button — retry until value appears in cell
 			const button = document.querySelector(`.sudoku-input-button[data-number="${value}"]`);
-
 			if (!button) continue;
 
-			button.dispatchEvent(
-				new MouseEvent('mousedown', {
-					bubbles: true,
-				}),
-			);
+			let filled = false;
+			for (let attempt = 0; attempt < 3 && !filled; attempt++) {
+				button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+				button.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+				button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+				await sleep(25);
+				filled = getSudokuCellValue(cell) === value;
+				if (!filled) await sleep(15);
+			}
 
-			button.dispatchEvent(
-				new MouseEvent('mouseup', {
-					bubbles: true,
-				}),
-			);
+			if (!filled) {
+				console.warn(`[Sudoku] Cell [${r},${c}] did not register value ${value} after retries`);
+			}
 
-			button.dispatchEvent(
-				new MouseEvent('click', {
-					bubbles: true,
-				}),
-			);
-
-			// human-ish pacing
-			const delay = settings.jitter ? settings.speed + Math.random() * 80 - 40 : settings.speed;
-
-			await sleep(Math.max(60, delay));
+			// Pace so total per-cell time = settings.speed
+			const elapsed = performance.now() - stepStart;
+			await sleep(Math.max(0, settings.speed - elapsed));
 		}
 	}
 }
@@ -834,13 +1001,13 @@ function getCellElement(row, col) {
 	// Sudoku
 	if (game === 'sudoku') {
 		const idx = row * 6 + col;
-
-		return document.querySelector(`.sudoku-cell[data-cell-idx="${idx}"]`);
+		// Signed-in: .sudoku-cell; signed-out: any [data-cell-idx] inside the sudoku grid
+		return document.querySelector(`.sudoku-cell[data-cell-idx="${idx}"]`) || document.querySelector(`[data-sudoku-grid="true"] [data-cell-idx="${idx}"]`);
 	}
 
 	// Zip + Queens
 	if (game === 'zip' || game === 'queens') {
-		const grid = document.querySelector('[data-testid="interactive-grid"]');
+		const grid = game === 'queens' ? getQueensGrid() : getZipGrid();
 
 		if (!grid) {
 			console.error('[Solver] Board not found');
@@ -866,17 +1033,32 @@ function getCellElement(row, col) {
 	return document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
 }
 
-async function clickCell(row, col, settings) {
+/**
+ * Click a cell and verify the expected DOM state before proceeding.
+ * Retries up to maxAttempts times if verification fails.
+ */
+async function clickCellWithVerify(row, col, verifyFn, settings, maxAttempts = 3) {
 	const cell = getCellElement(row, col);
 	if (!cell) return;
 
-	cell.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-	cell.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-	cell.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+	for (let attempt = 0; attempt < maxAttempts; attempt++) {
+		cell.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+		cell.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+		cell.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
+		// Give the page a moment to react, then verify
+		await sleep(25);
+		if (verifyFn(cell)) return; // confirmed — move on
+		await sleep(20); // brief extra pause before retry
+	}
+
+	console.warn(`[Solver] Cell [${row},${col}] did not verify after ${maxAttempts} attempts`);
+}
+
+async function clickCell(row, col, settings) {
 	const delay = settings.jitter ? settings.speed + Math.random() * 80 - 40 : settings.speed;
-
-	await sleep(delay);
+	await clickCellWithVerify(row, col, () => true, settings);
+	await sleep(Math.max(0, delay - 45)); // 45ms already spent in verify loop
 }
 
 function sleep(ms) {
