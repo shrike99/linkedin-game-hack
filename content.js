@@ -18,6 +18,29 @@ chrome.storage.sync.get(['enabled', 'autoSolve'], ({ enabled, autoSolve }) => {
 		.catch((err) => console.warn('[Solver] Auto-solve failed:', err));
 });
 
+// Runs whenever ANY button is clicked — catches the "Start game" splash screen button
+document.addEventListener(
+	'click',
+	(event) => {
+		const button = event.target.closest('button');
+		if (!button) return;
+
+		// Only react to the LinkedIn launch/start button
+		if (button.id !== 'launch-footer-start-button' && !button.classList.contains('launch-footer__btn--start')) return;
+
+		console.log('[Solver] Start game button clicked, waiting for board...');
+
+		chrome.storage.sync.get(['enabled', 'autoSolve'], ({ enabled, autoSolve }) => {
+			if (!enabled) return;
+			// Always at least highlight; autoSolve controls whether to also apply
+			waitForBoard(10000)
+				.then(() => handleSolve(autoSolve))
+				.catch((err) => console.warn('[Solver] Post-start-button solve failed:', err));
+		});
+	},
+	true, // capture phase so we see it before the page handles it
+);
+
 // Auto-highlight on page load (without solving)
 waitForBoard()
 	.then(() => handleSolve(false))
@@ -189,20 +212,31 @@ function scrapeTango() {
 			cells[row][col] = valueSvg.getAttribute('aria-label') === 'Sun' ? 1 : 2;
 		}
 
-		// constraints — edge marker SVGs inside ._83d57617 wrapper
-		// _5fcd6a0b = right edge  → constraint with cell to the right [row, col+1]
-		// _64a25184 = bottom edge → constraint with cell below        [row+1, col]
+		// constraints — find edge marker SVGs and determine direction via position
 		const edgeSvgs = cellEl.querySelectorAll('svg[data-testid="edge-equal"], svg[data-testid="edge-cross"]');
 		edgeSvgs.forEach((edgeSvg) => {
 			const type = edgeSvg.getAttribute('data-testid') === 'edge-equal' ? 0 : 1;
-			const wrapper = edgeSvg.closest('._83d57617');
-			if (!wrapper) return;
 
-			if (wrapper.classList.contains('_5fcd6a0b')) {
-				// right edge
+			// Use bounding rects to determine if this is a right-edge or bottom-edge constraint.
+			// The marker sits in a small overlay div positioned at the edge of the cell.
+			// If the marker's center X is near the cell's right edge → right constraint.
+			// If the marker's center Y is near the cell's bottom edge → bottom constraint.
+			const cellRect = cellEl.getBoundingClientRect();
+			const markerRect = edgeSvg.getBoundingClientRect();
+			if (markerRect.width === 0 && markerRect.height === 0) return; // not visible
+
+			const markerCenterX = markerRect.left + markerRect.width / 2;
+			const markerCenterY = markerRect.top + markerRect.height / 2;
+
+			// Distance from cell right edge vs cell bottom edge
+			const distFromRight = Math.abs(markerCenterX - cellRect.right);
+			const distFromBottom = Math.abs(markerCenterY - cellRect.bottom);
+
+			if (distFromRight < distFromBottom) {
+				// right edge → constraint with cell to the right
 				constraints.push({ a: [row, col], b: [row, col + 1], type });
-			} else if (wrapper.classList.contains('_64a25184')) {
-				// bottom edge
+			} else {
+				// bottom edge → constraint with cell below
 				constraints.push({ a: [row, col], b: [row + 1, col], type });
 			}
 		});
@@ -568,7 +602,6 @@ async function applyQueens(board, settings) {
 }
 
 async function applyTango(board, settings) {
-	// only click empty cells — prefilled ones (aria-disabled="true") can't be clicked
 	const grid = document.querySelector('[data-testid="interactive-grid"]');
 	const cellEls = grid.querySelectorAll('[data-testid^="cell-"][role="button"]');
 
@@ -586,90 +619,86 @@ async function applyTango(board, settings) {
 		const target = board.cells[row][col]; // 1 = SUN, 2 = MOON
 		if (target === 0) continue;
 
-		const rect = cellEl.getBoundingClientRect();
-		const x = rect.left + rect.width / 2;
-		const y = rect.top + rect.height / 2;
-		const realTarget = document.elementFromPoint(x, y);
-		const baseOpts = { bubbles: true, cancelable: true, clientX: x, clientY: y, screenX: x, screenY: y, pointerId: 1, pointerType: 'mouse', isPrimary: true };
 		const cellStart = performance.now();
 
-		if (target === 1) {
-			// SUN: one left click (empty -> sun)
-			realTarget.dispatchEvent(new PointerEvent('pointerover', baseOpts));
-			realTarget.dispatchEvent(new PointerEvent('pointerenter', baseOpts));
-			realTarget.dispatchEvent(new PointerEvent('pointerdown', baseOpts));
-			realTarget.dispatchEvent(new MouseEvent('mousedown', { ...baseOpts, button: 0, buttons: 1 }));
-			realTarget.dispatchEvent(new PointerEvent('pointerup', baseOpts));
-			realTarget.dispatchEvent(new MouseEvent('mouseup', { ...baseOpts, button: 0, buttons: 0 }));
-			realTarget.dispatchEvent(new MouseEvent('click', { ...baseOpts, button: 0, buttons: 0 }));
-		} else {
-			// MOON: right-click (empty -> moon directly)
-			const rightOpts = { ...baseOpts, button: 2, buttons: 2 };
-			realTarget.dispatchEvent(new PointerEvent('pointerover', baseOpts));
-			realTarget.dispatchEvent(new PointerEvent('pointerenter', baseOpts));
-			realTarget.dispatchEvent(new PointerEvent('pointerdown', rightOpts));
-			realTarget.dispatchEvent(new MouseEvent('mousedown', rightOpts));
-			realTarget.dispatchEvent(new PointerEvent('pointerup', rightOpts));
-			realTarget.dispatchEvent(new MouseEvent('mouseup', rightOpts));
-			realTarget.dispatchEvent(new MouseEvent('contextmenu', rightOpts));
+		// Click until the cell shows the target value (read DOM state each time)
+		let attempts = 0;
+		while (attempts < 4) {
+			const currentSvg = cellEl.querySelector('svg[data-testid="cell-zero"], svg[data-testid="cell-one"], svg[data-testid="cell-empty"]');
+			const currentLabel = currentSvg ? currentSvg.getAttribute('aria-label') : 'Empty';
+			const currentState = currentLabel === 'Sun' ? 1 : currentLabel === 'Moon' ? 2 : 0;
+
+			if (currentState === target) break;
+
+			const rect = cellEl.getBoundingClientRect();
+			const x = rect.left + rect.width / 2;
+			const y = rect.top + rect.height / 2;
+			// elementFromPoint can return the solver highlight overlay even with
+			// pointer-events:none, so walk up until we find the actual cell button
+			let el = document.elementFromPoint(x, y) || cellEl;
+			while (el && !el.hasAttribute('data-cell-idx') && el !== cellEl) el = el.parentElement;
+			el = el || cellEl;
+			const opts = { bubbles: true, cancelable: true, clientX: x, clientY: y, screenX: x, screenY: y, pointerId: 1, pointerType: 'mouse', isPrimary: true };
+
+			el.dispatchEvent(new PointerEvent('pointerdown', { ...opts, button: 0, buttons: 1 }));
+			el.dispatchEvent(new MouseEvent('mousedown', { ...opts, button: 0, buttons: 1 }));
+			el.dispatchEvent(new PointerEvent('pointerup', opts));
+			el.dispatchEvent(new MouseEvent('mouseup', { ...opts, button: 0, buttons: 0 }));
+			el.dispatchEvent(new MouseEvent('click', { ...opts, button: 0, buttons: 0 }));
+
+			await sleep(100); // wait for DOM to update before re-checking
+			attempts++;
 		}
 
 		const elapsed = performance.now() - cellStart;
-		await sleep(Math.max(30, settings.speed - elapsed));
+		await sleep(Math.max(50, settings.speed - elapsed));
 	}
 }
 
 async function applyZip(path, settings) {
 	if (!path?.length) return;
 
-	const first = getCellElement(path[0][0], path[0][1]);
+	function cellCenter(row, col) {
+		const cell = getCellElement(row, col);
+		if (!cell) return null;
+		const rect = cell.getBoundingClientRect();
+		return {
+			x: rect.left + rect.width / 2,
+			y: rect.top + rect.height / 2,
+			target: document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2) || cell,
+		};
+	}
 
-	if (!first) return;
+	function pointerOpts(x, y, extra = {}) {
+		return { bubbles: true, cancelable: true, clientX: x, clientY: y, screenX: x, screenY: y, pointerId: 1, pointerType: 'mouse', isPrimary: true, ...extra };
+	}
 
-	// focus starting cell
-	first.focus();
-	first.click();
+	const start = cellCenter(path[0][0], path[0][1]);
+	if (!start) return;
 
-	await sleep(50);
+	// pointerdown on the first cell to begin the drag
+	start.target.dispatchEvent(new PointerEvent('pointerdown', pointerOpts(start.x, start.y, { button: 0, buttons: 1 })));
+	start.target.dispatchEvent(new MouseEvent('mousedown', { ...pointerOpts(start.x, start.y), button: 0, buttons: 1 }));
 
+	await sleep(30);
+
+	// pointermove through every subsequent cell in the path
 	for (let i = 1; i < path.length; i++) {
-		const [pr, pc] = path[i - 1];
-		const [r, c] = path[i];
+		const pt = cellCenter(path[i][0], path[i][1]);
+		if (!pt) continue;
 
-		const dr = r - pr;
-		const dc = c - pc;
-
-		let key = null;
-
-		if (dr === -1) key = 'ArrowUp';
-		else if (dr === 1) key = 'ArrowDown';
-		else if (dc === -1) key = 'ArrowLeft';
-		else if (dc === 1) key = 'ArrowRight';
-
-		if (!key) continue;
-
-		const event = new KeyboardEvent('keydown', {
-			key,
-			code: key,
-			bubbles: true,
-			cancelable: true,
-		});
-
-		document.activeElement.dispatchEvent(event);
-
-		// LinkedIn listens to keyup too
-		const upEvent = new KeyboardEvent('keyup', {
-			key,
-			code: key,
-			bubbles: true,
-			cancelable: true,
-		});
-
-		document.activeElement.dispatchEvent(upEvent);
+		pt.target.dispatchEvent(new PointerEvent('pointermove', pointerOpts(pt.x, pt.y, { buttons: 1 })));
+		pt.target.dispatchEvent(new MouseEvent('mousemove', { ...pointerOpts(pt.x, pt.y), buttons: 1 }));
 
 		const delay = settings.jitter ? settings.speed + Math.random() * 40 : settings.speed;
+		await sleep(Math.max(20, delay));
+	}
 
-		await sleep(Math.max(25, delay));
+	// pointerup on the last cell to finish the drag
+	const end = cellCenter(path[path.length - 1][0], path[path.length - 1][1]);
+	if (end) {
+		end.target.dispatchEvent(new PointerEvent('pointerup', pointerOpts(end.x, end.y, { button: 0, buttons: 0 })));
+		end.target.dispatchEvent(new MouseEvent('mouseup', { ...pointerOpts(end.x, end.y), button: 0, buttons: 0 }));
 	}
 }
 
