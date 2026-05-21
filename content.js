@@ -73,9 +73,23 @@ function waitForBoard(timeout = 5000) {
 
 function isBoardReady() {
 	const game = detectGame();
-	if (game === 'tango') return !!document.querySelector('[data-testid="interactive-grid"]');
-	if (game === 'queens') return !!document.querySelector('[data-testid="interactive-grid"]');
-	if (game === 'zip') return !!document.querySelector('[data-testid="zip-game-container"]');
+	if (game === 'tango') {
+		const grid = getTangoGrid();
+		if (!grid) return false;
+		// Grid container appears before cells are populated — wait for actual cells
+		const cells = getTangoCells(grid);
+		return cells.length >= 4;
+	}
+	if (game === 'queens') {
+		const grid = document.querySelector('[data-testid="interactive-grid"]');
+		if (!grid) return false;
+		return grid.querySelectorAll('[data-cell-idx]').length >= 4;
+	}
+	if (game === 'zip') {
+		const grid = document.querySelector('[data-testid="interactive-grid"]');
+		if (!grid) return false;
+		return grid.querySelectorAll('[data-cell-idx]').length >= 4;
+	}
 	if (game === 'sudoku') return !!document.querySelector('[data-sudoku-grid="true"]');
 
 	return false;
@@ -190,53 +204,83 @@ function scrapeBoard(game) {
 	if (game === 'sudoku') return scrapeSudoku();
 }
 
+// Returns the tango grid element regardless of signed-in vs signed-out DOM variant
+function getTangoGrid() {
+	return document.querySelector('[data-testid="interactive-grid"]') || document.querySelector('.lotka-grid');
+}
+
+// Returns all tango cell button elements
+function getTangoCells(grid) {
+	// Signed-in: cells have data-testid^="cell-"
+	// Signed-out: cells have class lotka-cell and role=button
+	const byTestId = grid.querySelectorAll('[data-testid^="cell-"][role="button"]');
+	if (byTestId.length) return byTestId;
+	return grid.querySelectorAll('.lotka-cell[role="button"]');
+}
+
+// Returns { label: "Sun"|"Moon"|"Empty" } from a cell element
+function getTangoCellValue(cellEl) {
+	// Signed-in: svg with data-testid="cell-zero/one/empty"
+	const testIdSvg = cellEl.querySelector('svg[data-testid="cell-zero"], svg[data-testid="cell-one"], svg[data-testid="cell-empty"]');
+	if (testIdSvg) return testIdSvg.getAttribute('aria-label');
+	// Signed-out: svg with class lotka-cell-content-img
+	const lotkaSvg = cellEl.querySelector('svg[aria-label]');
+	if (lotkaSvg) return lotkaSvg.getAttribute('aria-label');
+	return 'Empty';
+}
+
+// Returns all edge SVGs within a cell, with their type (0=equal, 1=cross)
+function getTangoEdges(cellEl) {
+	const results = [];
+	// Signed-in: svg[data-testid="edge-equal/cross"]
+	cellEl.querySelectorAll('svg[data-testid="edge-equal"], svg[data-testid="edge-cross"]').forEach((svg) => {
+		results.push({ svg, type: svg.getAttribute('data-testid') === 'edge-equal' ? 0 : 1 });
+	});
+	if (results.length) return results;
+	// Signed-out: svg with aria-label="Equal"/"Cross" inside .lotka-cell-edge
+	cellEl.querySelectorAll('.lotka-cell-edge svg[aria-label]').forEach((svg) => {
+		const label = svg.getAttribute('aria-label');
+		if (label === 'Equal' || label === 'Cross') {
+			results.push({ svg, type: label === 'Equal' ? 0 : 1 });
+		}
+	});
+	return results;
+}
 function scrapeTango() {
-	const grid = document.querySelector('[data-testid="interactive-grid"]');
-	const cellEls = grid.querySelectorAll('[data-testid^="cell-"][role="button"]');
+	const grid = getTangoGrid();
+	const cellEls = getTangoCells(grid);
 	const size = Math.round(Math.sqrt(cellEls.length));
 	const cells = Array.from({ length: size }, () => Array(size).fill(0));
 	const constraints = [];
 
 	cellEls.forEach((cellEl) => {
-		// row/col from a11y span: id="tango-cell-position-a11y-text-ROW-COL"
-		const a11y = cellEl.querySelector('[id^="tango-cell-position-a11y-text-"]');
-		if (!a11y) return;
-		const parts = a11y.id.match(/(\d+)-(\d+)$/);
+		// Get row/col from aria-describedby — works for both variants since the id always ends in ROW-COL
+		const describedBy = cellEl.getAttribute('aria-describedby');
+		if (!describedBy) return;
+		const parts = describedBy.match(/(\d+)-(\d+)$/);
 		if (!parts) return;
 		const row = parseInt(parts[1]);
 		const col = parseInt(parts[2]);
 
-		// cell value from SVG aria-label: "Sun" = 1, "Moon" = 2, "Empty" = 0
-		const valueSvg = cellEl.querySelector('svg[data-testid="cell-zero"], svg[data-testid="cell-one"]');
-		if (valueSvg) {
-			cells[row][col] = valueSvg.getAttribute('aria-label') === 'Sun' ? 1 : 2;
-		}
+		// cell value
+		const label = getTangoCellValue(cellEl);
+		if (label === 'Sun') cells[row][col] = 1;
+		else if (label === 'Moon') cells[row][col] = 2;
 
-		// constraints — find edge marker SVGs and determine direction via position
-		const edgeSvgs = cellEl.querySelectorAll('svg[data-testid="edge-equal"], svg[data-testid="edge-cross"]');
-		edgeSvgs.forEach((edgeSvg) => {
-			const type = edgeSvg.getAttribute('data-testid') === 'edge-equal' ? 0 : 1;
-
-			// Use bounding rects to determine if this is a right-edge or bottom-edge constraint.
-			// The marker sits in a small overlay div positioned at the edge of the cell.
-			// If the marker's center X is near the cell's right edge → right constraint.
-			// If the marker's center Y is near the cell's bottom edge → bottom constraint.
+		// constraints — use bounding rect to determine right vs bottom edge
+		getTangoEdges(cellEl).forEach(({ svg, type }) => {
 			const cellRect = cellEl.getBoundingClientRect();
-			const markerRect = edgeSvg.getBoundingClientRect();
-			if (markerRect.width === 0 && markerRect.height === 0) return; // not visible
+			const markerRect = svg.getBoundingClientRect();
+			if (markerRect.width === 0 && markerRect.height === 0) return;
 
 			const markerCenterX = markerRect.left + markerRect.width / 2;
 			const markerCenterY = markerRect.top + markerRect.height / 2;
-
-			// Distance from cell right edge vs cell bottom edge
 			const distFromRight = Math.abs(markerCenterX - cellRect.right);
 			const distFromBottom = Math.abs(markerCenterY - cellRect.bottom);
 
 			if (distFromRight < distFromBottom) {
-				// right edge → constraint with cell to the right
 				constraints.push({ a: [row, col], b: [row, col + 1], type });
 			} else {
-				// bottom edge → constraint with cell below
 				constraints.push({ a: [row, col], b: [row + 1, col], type });
 			}
 		});
@@ -602,16 +646,17 @@ async function applyQueens(board, settings) {
 }
 
 async function applyTango(board, settings) {
-	const grid = document.querySelector('[data-testid="interactive-grid"]');
-	const cellEls = grid.querySelectorAll('[data-testid^="cell-"][role="button"]');
+	const grid = getTangoGrid();
+	const cellEls = getTangoCells(grid);
 
 	for (const cellEl of cellEls) {
 		// skip prefilled cells
 		if (cellEl.getAttribute('aria-disabled') === 'true') continue;
 
-		const a11y = cellEl.querySelector('[id^="tango-cell-position-a11y-text-"]');
-		if (!a11y) continue;
-		const parts = a11y.id.match(/(\d+)-(\d+)$/);
+		// Get row/col from aria-describedby (works for both DOM variants)
+		const describedBy = cellEl.getAttribute('aria-describedby');
+		if (!describedBy) continue;
+		const parts = describedBy.match(/(\d+)-(\d+)$/);
 		if (!parts) continue;
 		const row = parseInt(parts[1]);
 		const col = parseInt(parts[2]);
@@ -624,8 +669,7 @@ async function applyTango(board, settings) {
 		// Click until the cell shows the target value (read DOM state each time)
 		let attempts = 0;
 		while (attempts < 4) {
-			const currentSvg = cellEl.querySelector('svg[data-testid="cell-zero"], svg[data-testid="cell-one"], svg[data-testid="cell-empty"]');
-			const currentLabel = currentSvg ? currentSvg.getAttribute('aria-label') : 'Empty';
+			const currentLabel = getTangoCellValue(cellEl);
 			const currentState = currentLabel === 'Sun' ? 1 : currentLabel === 'Moon' ? 2 : 0;
 
 			if (currentState === target) break;
@@ -776,13 +820,15 @@ async function applySudoku(board, settings) {
 function getCellElement(row, col) {
 	const game = detectGame();
 
-	// Tango
+	// Tango — look up by aria-describedby since the a11y span is a sibling in lotka DOM,
+	// not a child, so closest('[role="button"]') from the span doesn't work.
 	if (game === 'tango') {
+		// Both variants: cell has aria-describedby ending in "-ROW-COL"
+		const cell = document.querySelector(`[aria-describedby$="-${row}-${col}"][role="button"]`);
+		if (cell) return cell;
+		// Fallback for signed-in variant where span is inside the cell
 		const a11y = document.querySelector(`[id$="a11y-text-${row}-${col}"]`);
-
-		if (a11y) {
-			return a11y.closest('[role="button"]');
-		}
+		if (a11y) return a11y.closest('[role="button"]');
 	}
 
 	// Sudoku
