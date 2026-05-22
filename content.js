@@ -81,18 +81,12 @@ function detectGame() {
 	if (url.includes('zip')) return 'zip';
 	if (url.includes('sudoku')) return 'sudoku';
 
-	if (document.querySelector('[data-trail-grid="true"]')) return 'zip';
+	// DOM fallbacks — check tango BEFORE zip, tango also has data-trail-grid
+	if (document.querySelector('[data-testid="tango-game-container"]')) return 'tango';
+	if (document.querySelector('[data-testid="zip-game-container"]')) return 'zip';
 	if (document.querySelector('#queens-grid')) return 'queens';
-	if (document.querySelector('[data-testid="interactive-grid"] [data-cell-idx]')) {
-		const firstCell = document.querySelector('[data-cell-idx="0"]');
-		if (firstCell) {
-			const label = firstCell.getAttribute('aria-label') || '';
-			if (/color/i.test(label)) return 'queens';
-			if (firstCell.querySelector('[data-cell-content], .trail-cell-content')) return 'zip';
-		}
-	}
 	if (document.querySelector('[data-sudoku-grid="true"]')) return 'sudoku';
-	if (document.querySelector('[data-testid="interactive-grid"] [data-testid^="cell-"]')) return 'tango';
+
 	return null;
 }
 

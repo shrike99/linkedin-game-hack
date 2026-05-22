@@ -470,55 +470,57 @@
 		</div>
 
 		<div class="section" id="settingsSection">
-			<div class="section-label section-label-collapsible" id="settingsToggle" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:0;">
+			<div class="section-label section-label-collapsible" id="settingsToggle" style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; margin-bottom: 0">
 				<span>Settings</span>
-				<svg id="settingsChevron" viewBox="0 0 12 12" fill="none" style="width:12px;height:12px;transition:transform 0.2s;flex-shrink:0;">
-					<path d="M2 4L6 8L10 4" stroke="var(--muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+				<svg id="settingsChevron" viewBox="0 0 12 12" fill="none" style="width: 12px; height: 12px; transition: transform 0.2s; flex-shrink: 0">
+					<path d="M2 4L6 8L10 4" stroke="var(--muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
 				</svg>
 			</div>
-			<div id="settingsContent" style="margin-top:10px;">
-			<div class="slider-row" style="border-top:none;padding-top:0;">
-				<div class="slider-header">
-					<span class="slider-label">Solve speed</span>
-					<span class="slider-value" id="speedLabel">1000 ms</span>
+			<div id="settingsContent" style="margin-top: 10px">
+				<div class="slider-row" style="border-top: none; padding-top: 0">
+					<div class="slider-header">
+						<span class="slider-label">Solve speed</span>
+						<span class="slider-value" id="speedLabel">1000 ms</span>
+					</div>
+					<input type="range" id="speedSlider" min="0" max="4" step="1" value="2" />
 				</div>
-				<input type="range" id="speedSlider" min="0" max="4" step="1" value="2" />
-			</div>
 
-			<div class="setting-row" style="margin-top: 8px">
-				<div class="setting-left">
-					<span class="setting-name">Auto-solve on load</span>
-					<span class="setting-desc">Run solver when game is detected</span>
+				<div class="setting-row" style="margin-top: 8px">
+					<div class="setting-left">
+						<span class="setting-name">Auto-solve on load</span>
+						<span class="setting-desc">Run solver when game is detected</span>
+					</div>
+					<label class="toggle">
+						<input type="checkbox" id="autoSolve" />
+						<div class="toggle-track"><div class="toggle-thumb"></div></div>
+					</label>
 				</div>
-				<label class="toggle">
-					<input type="checkbox" id="autoSolve" />
-					<div class="toggle-track"><div class="toggle-thumb"></div></div>
-				</label>
-			</div>
 
-			<div class="setting-row">
-				<div class="setting-left">
-					<span class="setting-name">Highlight solution</span>
-					<span class="setting-desc">Show answer before clicking</span>
+				<div class="setting-row">
+					<div class="setting-left">
+						<span class="setting-name">Highlight solution</span>
+						<span class="setting-desc">Show answer before clicking</span>
+					</div>
+					<label class="toggle">
+						<input type="checkbox" id="highlight" checked />
+						<div class="toggle-track"><div class="toggle-thumb"></div></div>
+					</label>
 				</div>
-				<label class="toggle">
-					<input type="checkbox" id="highlight" checked />
-					<div class="toggle-track"><div class="toggle-thumb"></div></div>
-				</label>
-			</div>
 
-			<div class="setting-row">
-				<div class="setting-left">
-					<span class="setting-name">Human-like delay</span>
-					<span class="setting-desc">Add random jitter between clicks</span>
+				<div class="setting-row">
+					<div class="setting-left">
+						<span class="setting-name">Human-like delay</span>
+						<span class="setting-desc">Add random jitter between clicks</span>
+					</div>
+					<label class="toggle">
+						<input type="checkbox" id="jitter" checked />
+						<div class="toggle-track"><div class="toggle-thumb"></div></div>
+					</label>
 				</div>
-				<label class="toggle">
-					<input type="checkbox" id="jitter" checked />
-					<div class="toggle-track"><div class="toggle-thumb"></div></div>
-				</label>
 			</div>
-			</div><!-- end settingsContent -->
-		</div><!-- end settingsSection -->
+			<!-- end settingsContent -->
+		</div>
+		<!-- end settingsSection -->
 
 		<div class="solve-section">
 			<button class="btn-solve" id="solveBtn">
