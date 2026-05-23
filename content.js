@@ -81,9 +81,12 @@ function detectGame() {
 	if (url.includes('zip')) return 'zip';
 	if (url.includes('sudoku')) return 'sudoku';
 
-	// DOM fallbacks — check tango BEFORE zip, tango also has data-trail-grid
+	// DOM fallbacks — check tango BEFORE zip (both use data-trail-grid and interactive-grid)
 	if (document.querySelector('[data-testid="tango-game-container"]')) return 'tango';
+	if (document.querySelector('[data-testid="tango-gameboard-wrapper"]')) return 'tango';
 	if (document.querySelector('[data-testid="zip-game-container"]')) return 'zip';
+	// Signed-in zip: has interactive-grid with data-trail-grid but no tango wrapper
+	if (document.querySelector('[data-testid="interactive-grid"][data-trail-grid]') && !document.querySelector('[data-testid="tango-gameboard-wrapper"]')) return 'zip';
 	if (document.querySelector('#queens-grid')) return 'queens';
 	if (document.querySelector('[data-sudoku-grid="true"]')) return 'sudoku';
 
@@ -122,11 +125,9 @@ function isBoardReady() {
 	if (game === 'zip') {
 		const grid = getZipGrid();
 		if (!grid) return false;
+		// Just need cells to be present — the signed-in DOM has no trail-cell--filled or circle-start
 		const cells = grid.querySelectorAll('[data-cell-idx]');
-		if (cells.length < 4) return false;
-		const hasStartCell = !!grid.querySelector('.trail-cell--filled, [class*="circle-start"], [data-cell-start]');
-		const gridIsInteractive = grid.getAttribute('tabindex') !== null || grid.getAttribute('role') !== null;
-		return hasStartCell || gridIsInteractive;
+		return cells.length >= 4;
 	}
 	if (game === 'sudoku') {
 		const grid = document.querySelector('[data-sudoku-grid="true"]');
@@ -260,7 +261,15 @@ function getQueensGrid() {
 }
 
 function getZipGrid() {
-	return document.querySelector('[data-testid="interactive-grid"]') || document.querySelector('[data-trail-grid="true"] .trail-grid');
+	// Signed-in: grid is [data-testid="interactive-grid"][data-trail-grid]
+	// Must not match tango which also uses interactive-grid — tango is wrapped in tango-gameboard-wrapper
+	const tangoWrapper = document.querySelector('[data-testid="tango-gameboard-wrapper"]');
+	if (!tangoWrapper) {
+		const grid = document.querySelector('[data-testid="interactive-grid"][data-trail-grid]');
+		if (grid) return grid;
+	}
+	// Signed-out fallbacks
+	return document.querySelector('[data-testid="zip-game-container"] [data-testid="interactive-grid"]') || document.querySelector('[data-trail-grid="true"] .trail-grid');
 }
 
 function getTangoGrid() {
@@ -283,17 +292,47 @@ function getTangoCellValue(cellEl) {
 	return 'Empty';
 }
 
+function getTangoEdgeDirection(svg) {
+	// Determine whether an edge marker SVG sits on the RIGHT or BOTTOM edge of its cell.
+	// Uses offsetLeft/offsetTop (layout-relative, iframe-safe) — no class names.
+	const container = svg.parentElement;
+	if (!container) return null;
+	const cell = container.closest('[data-cell-idx]');
+	if (!cell) return null;
+
+	const cellW = cell.offsetWidth;
+	const cellH = cell.offsetHeight;
+	if (!cellW || !cellH) return null;
+
+	const contL = container.offsetLeft;
+	const contT = container.offsetTop;
+	const contR = contL + container.offsetWidth;
+	const contB = contT + container.offsetHeight;
+
+	// The container is positioned at whichever edge it belongs to.
+	// Right-edge containers have their right side near the cell's right edge.
+	// Bottom-edge containers have their bottom side near the cell's bottom edge.
+	const distFromRight = Math.abs(contR - cellW);
+	const distFromBottom = Math.abs(contB - cellH);
+
+	// Whichever edge it's closer to wins
+	if (distFromRight < distFromBottom) return 'right';
+	return 'bottom';
+}
+
 function getTangoEdges(cellEl) {
 	const results = [];
 	if (!cellEl) return results;
 	cellEl.querySelectorAll('svg[data-testid="edge-equal"], svg[data-testid="edge-cross"]').forEach((svg) => {
-		results.push({ svg, type: svg.getAttribute('data-testid') === 'edge-equal' ? 0 : 1 });
+		const type = svg.getAttribute('data-testid') === 'edge-equal' ? 0 : 1;
+		const dir = getTangoEdgeDirection(svg);
+		results.push({ svg, type, dir });
 	});
 	if (results.length) return results;
 	cellEl.querySelectorAll('.lotka-cell-edge svg[aria-label]').forEach((svg) => {
 		const label = svg.getAttribute('aria-label');
 		if (label === 'Equal' || label === 'Cross') {
-			results.push({ svg, type: label === 'Equal' ? 0 : 1 });
+			results.push({ svg, type: label === 'Equal' ? 0 : 1, dir: null });
 		}
 	});
 	return results;
@@ -318,17 +357,23 @@ function scrapeTango() {
 		if (label === 'Sun') cells[row][col] = 1;
 		else if (label === 'Moon') cells[row][col] = 2;
 
-		getTangoEdges(cellEl).forEach(({ svg, type }) => {
-			const cellRect = cellEl.getBoundingClientRect();
-			const markerRect = svg.getBoundingClientRect();
-			if (markerRect.width === 0 && markerRect.height === 0) return;
+		getTangoEdges(cellEl).forEach(({ svg, type, dir }) => {
+			let resolvedDir = dir;
 
-			const markerCenterX = markerRect.left + markerRect.width / 2;
-			const markerCenterY = markerRect.top + markerRect.height / 2;
-			const distFromRight = Math.abs(markerCenterX - cellRect.right);
-			const distFromBottom = Math.abs(markerCenterY - cellRect.bottom);
+			if (!resolvedDir) {
+				// Fallback to getBoundingClientRect for lotka-style or undetected layouts
+				const cellRect = cellEl.getBoundingClientRect();
+				const markerRect = svg.getBoundingClientRect();
+				// Only use pixel fallback if the element is actually visible
+				if (markerRect.width === 0 && markerRect.height === 0) return;
+				const markerCenterX = markerRect.left + markerRect.width / 2;
+				const markerCenterY = markerRect.top + markerRect.height / 2;
+				const distFromRight = Math.abs(markerCenterX - cellRect.right);
+				const distFromBottom = Math.abs(markerCenterY - cellRect.bottom);
+				resolvedDir = distFromRight < distFromBottom ? 'right' : 'bottom';
+			}
 
-			if (distFromRight < distFromBottom) {
+			if (resolvedDir === 'right') {
 				constraints.push({ a: [row, col], b: [row, col + 1], type });
 			} else {
 				constraints.push({ a: [row, col], b: [row + 1, col], type });
@@ -377,9 +422,24 @@ function scrapeZip() {
 	const gridEl = getZipGrid();
 	if (!gridEl) return null;
 
-	const cellEls = gridEl.querySelectorAll('[data-cell-idx]');
+	const cellEls = [...gridEl.querySelectorAll('[data-cell-idx]')];
 	const size = Math.round(Math.sqrt(cellEls.length));
 	const grid = Array.from({ length: size }, () => Array(size).fill(0));
+	const walls = [];
+
+	// Wall detection using geometry only — no class names, works across signed-in/out and
+	// survives LinkedIn's daily CSS obfuscation changes.
+	//
+	// Walls are thin divs positioned at the edge of a cell. We identify them by:
+	//   1. No data-* attributes (not a content, testid, or hint div)
+	//   2. No meaningful child elements or text
+	//   3. Much thinner than the cell in one dimension (≤30% of cell size)
+	//   4. Position (offsetLeft/offsetTop relative to cell) tells us which edge:
+	//        near right edge  → wall between this cell and its right neighbour
+	//        near bottom edge → wall between this cell and its bottom neighbour
+	//
+	// offsetLeft/offsetTop are layout-relative (not viewport-relative), so they work
+	// even inside iframes or when the element is scrolled out of view.
 
 	cellEls.forEach((cell) => {
 		const idx = parseInt(cell.dataset.cellIdx);
@@ -389,11 +449,55 @@ function scrapeZip() {
 		const content = cell.querySelector('[data-cell-content]') || cell.querySelector('.trail-cell-content');
 		if (content) {
 			const value = parseInt(content.textContent.trim());
-			grid[row][col] = Number.isNaN(value) ? 0 : value;
+			if (!Number.isNaN(value)) grid[row][col] = value;
+		}
+
+		const cellW = cell.offsetWidth;
+		const cellH = cell.offsetHeight;
+		if (!cellW || !cellH) return; // cell not laid out yet
+
+		for (const child of cell.children) {
+			// Skip known non-wall children
+			if (child.hasAttribute('data-cell-content')) continue;
+			if (child.hasAttribute('data-testid')) continue;
+			if (child.hasAttribute('data-cell-hint-arrow')) continue;
+			// Skip anything with meaningful children (SVGs, nested divs with content)
+			if (child.querySelector('svg, [data-testid], [data-cell-content]')) continue;
+			// Skip if it has visible text
+			if (child.textContent.trim()) continue;
+
+			const w = child.offsetWidth;
+			const h = child.offsetHeight;
+			if (!w || !h) continue; // invisible / not rendered
+
+			// A wall div is thin in one dimension relative to the cell
+			const thinH = h <= cellH * 0.3; // thin vertically = horizontal wall (top/bottom edge)
+			const thinW = w <= cellW * 0.3; // thin horizontally = vertical wall (left/right edge)
+			if (!thinH && !thinW) continue; // not a wall shape
+
+			const left = child.offsetLeft;
+			const top = child.offsetTop;
+			const right = left + w;
+			const bottom = top + h;
+
+			if (thinH) {
+				// Horizontal wall — is it near the bottom edge of this cell?
+				if (bottom >= cellH * 0.6) {
+					walls.push({ from: [row, col], to: [row + 1, col] });
+				}
+				// (near top edge would be the same wall recorded by the cell above — skip)
+			} else {
+				// Vertical wall — is it near the right edge of this cell?
+				if (right >= cellW * 0.6) {
+					// Only record from the left cell (right neighbour will also have this div)
+					walls.push({ from: [row, col], to: [row, col + 1] });
+				}
+				// (near left edge = same wall recorded by the cell to the left — skip)
+			}
 		}
 	});
 
-	return { size, cells: grid, walls: [] };
+	return { size, cells: grid, walls };
 }
 
 function scrapeSudoku() {
